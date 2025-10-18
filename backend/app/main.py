@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import date, time, datetime
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
+# --- THAY DOI: Import them IntervalTrigger ---
+from apscheduler.triggers.interval import IntervalTrigger
 
 from .config import settings
 from .database import Base, engine, SessionLocal
@@ -121,14 +122,16 @@ def on_startup():
     # --- CÀI ĐẶT SCHEDULER ---
     try:
         scheduler = BackgroundScheduler(timezone=settings.TZ)
+        # --- THAY DOI: Chay tac vu moi 30 phut ---
         scheduler.add_job(
             create_daily_guest_entries,
-            trigger=CronTrigger(hour=8, minute=0), # 8:00 AM mỗi ngày
+            trigger=IntervalTrigger(minutes=30),
             id="create_daily_guests_job",
             name="Create daily guest entries from long-term registrations",
             replace_existing=True
         )
         scheduler.start()
-        logging.info(f"Scheduler for long-term guests started. Will run daily at 08:00 (Timezone: {settings.TZ}).")
+        logging.info(f"Scheduler for long-term guests started. Will run every 30 minutes (Timezone: {settings.TZ}).")
     except Exception as e:
         logging.error(f"Could not start the scheduler: {e}", exc_info=True)
+
