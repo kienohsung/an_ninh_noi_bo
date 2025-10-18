@@ -33,3 +33,5 @@ logs/
 
 # Google Cloud credentials
 backend/gcp-service-account.json.json
+# DB data
+backend/security_v2_3.db
