@@ -1,0 +1,35 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build / dist
+build/
+dist/
+.eggs/
+*.egg-info/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+
+# Google Cloud credentials
+backend/gcp-service-account.json.json
