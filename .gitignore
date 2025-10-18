@@ -35,3 +35,6 @@ logs/
 backend/gcp-service-account.json.json
 # DB data
 backend/security_v2_3.db
+
+# database
+backend/security_v2_3.db

@@ -1,0 +1,9 @@
+# Mặc định coi tất cả là text, chuẩn hóa LF trong repo
+* text=auto eol=lf
+
+# Các tệp nhị phân (không đổi line endings)
+*.db binary
+*.mp3 binary
+*.png binary
+*.jpg binary
+*.pdf binary
