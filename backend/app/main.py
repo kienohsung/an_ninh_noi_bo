@@ -25,7 +25,7 @@ app = FastAPI(title="Ứng dụng an ninh nội bộ - Local Security App", vers
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=["*"],  # hoặc liệt kê cụ thể ["http://192.168.10.55:5174"]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
