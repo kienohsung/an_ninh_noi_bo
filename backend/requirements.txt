@@ -1,3 +1,4 @@
+# Các thư viện cốt lõi của FastAPI và SQLAlchemy
 fastapi==0.112.2
 uvicorn[standard]==0.30.6
 SQLAlchemy==2.0.36
@@ -6,8 +7,17 @@ pydantic-settings==2.5.2
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.9
-openpyxl==3.1.5
+
+# Xử lý mật khẩu, cấu hình, và múi giờ
 python-dotenv==1.0.1
 bcrypt==4.0.1
 pytz==2024.1
+
+# Xử lý Excel (Đã có openpyxl và xlsxwriter, bổ sung pandas)
+pandas==2.2.2  # Cần thiết cho Import/Export dữ liệu
+openpyxl==3.1.5
 xlsxwriter==3.2.0
+
+# Các thư viện mới được bổ sung
+requests==2.32.3  # Cần thiết cho API proxy đến dịch vụ quét CCCD
+apscheduler==3.10.4  # Cần thiết cho tác vụ nền tự động tạo khách dài hạn

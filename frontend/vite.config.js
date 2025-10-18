@@ -13,5 +13,5 @@ export default defineConfig({
     alias: { '@': path.resolve(__dirname, './src') }
   },
   // Cấu hình server để chạy trên port 5174 và cho phép truy cập từ mạng LAN
-  server: { host: '0.0.0.0', port: 5173 }
+  server: { host: '0.0.0.0', port: 5174 }
 })
