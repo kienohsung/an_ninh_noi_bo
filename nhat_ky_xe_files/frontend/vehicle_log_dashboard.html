@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nhật ký xe (GSheet Dashboard)</title>
+  <!-- Vue + ApexCharts + SheetJS -->
+  <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 16px; }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    .toolbar { display: grid; grid-template-columns: repeat(6, minmax(140px, 1fr)); gap: 8px; align-items: end; }
+    .card { border: 1px solid #e6e6e6; border-radius: 12px; padding: 12px; background: var(--card-bg, #fff); }
+    .grid { display: grid; gap: 12px; }
+    .grid-2 { grid-template-columns: 2fr 1fr; }
+    label { display: flex; gap: 6px; flex-direction: column; font-size: 13px; }
+    input, select, button { padding: 8px; font-size: 14px; border-radius: 8px; border: 1px solid #d9d9d9; background: inherit; color: inherit; }
+    button.primary { background: #2563eb; color: white; border: none; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #eee; padding: 8px; font-size: 14px; text-align: left; }
+    th { background: #fafafa; }
+    .pagination { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .kpi .value { font-weight: 700; font-size: 22px; }
+    .kpi .label { color: #777; font-size: 12px; }
+    @media (max-width: 1024px) { .toolbar { grid-template-columns: 1fr 1fr; } .kpis{ grid-template-columns: 1fr 1fr; } .grid-2{ grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h1>📒 Nhật ký xe</h1>
+
+    <div class="toolbar card">
+      <label>Khoảng nhanh
+        <select v-model="quick">
+          <option value="today">Hôm nay</option>
+          <option value="last7">7 ngày</option>
+          <option value="last30">30 ngày</option>
+          <option value="thisWeek">Tuần này</option>
+          <option value="thisMonth">Tháng này</option>
+          <option value="prevMonth">Tháng trước</option>
+          <option value="">(Tùy chọn ngày)</option>
+        </select>
+      </label>
+      <label>Từ ngày
+        <input type="date" v-model="start" :disabled="!!quick">
+      </label>
+      <label>Đến ngày
+        <input type="date" v-model="end" :disabled="!!quick">
+      </label>
+      <label>Tìm (Số xe)
+        <input type="text" placeholder="VD: 51F..." v-model="q">
+      </label>
+      <button class="primary" @click="load">Lọc</button>
+      <button @click="exportExcel">Xuất Excel</button>
+    </div>
+
+    <div class="kpis">
+      <div class="card kpi">
+        <div class="value">{{ kpi.totalInRange }}</div>
+        <div class="label">Tổng lượt</div>
+        <div id="spark-total" style="height:40px;"></div>
+      </div>
+      <div class="card kpi">
+        <div class="value">{{ kpi.peakHour || '-' }}</div>
+        <div class="label">Giờ cao điểm</div>
+        <div id="spark-hour" style="height:40px;"></div>
+      </div>
+      <div class="card kpi">
+        <div class="value">{{ kpi.topPlate || '-' }}</div>
+        <div class="label">Xe hoạt động nhiều nhất</div>
+        <div id="spark-top" style="height:40px;"></div>
+      </div>
+      <div class="card kpi">
+        <div class="value">{{ kpi.avgPerDay }}</div>
+        <div class="label">Trung bình/ngày</div>
+        <div id="spark-avg" style="height:40px;"></div>
+      </div>
+    </div>
+
+    <div class="grid grid-2" style="margin-top:12px;">
+      <div class="card">
+        <div id="chart-trend" style="height:300px;"></div>
+      </div>
+      <div class="card">
+        <div id="chart-hour" style="height:300px;"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div id="chart-heatmap" style="height:340px;"></div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div id="chart-top" style="height:340px;"></div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <table>
+        <thead><tr><th>#</th><th>Số xe</th><th>Ngày</th><th>Giờ</th></tr></thead>
+        <tbody>
+          <tr v-for="(r,idx) in items" :key="idx">
+            <td>{{ (page-1)*pageSize + idx + 1 }}</td>
+            <td>{{ r.plate }}</td>
+            <td>{{ r.date }}</td>
+            <td>{{ r.time }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pagination">
+        <button :disabled="page<=1" @click="prev">« Trước</button>
+        <div>Trang {{ page }} / {{ totalPages }}</div>
+        <button :disabled="page>=totalPages" @click="next">Sau »</button>
+      </div>
+      <div>Tổng bản ghi: {{ total }}</div>
+    </div>
+  </div>
+
+<script>
+const { createApp, ref, computed, onMounted, watch } = Vue;
+
+createApp({
+  setup(){
+    const API_BASE = "http://localhost:8000";
+
+    const quick = ref("last7");
+    const start = ref("");
+    const end = ref("");
+    const q = ref("");
+
+    const total = ref(0);
+    const page = ref(1);
+    const pageSize = ref(50);
+    const items = ref([]);
+    const charts = ref({
+      daily:{labels:[],series:[]},
+      hours:{labels:[],series:[]},
+      heatmap:{rows:[],cols:[],matrix:[]},
+      top10:{labels:[],series:[]}
+    });
+    const kpi = ref({ totalInRange:0, peakHour:null, topPlate:null, avgPerDay:0 });
+
+    let chartTrend, chartHour, chartTop, chartHeatmap;
+
+    const totalPages = computed(()=> Math.max(1, Math.ceil(total.value / pageSize.value)));
+
+    function queryParams(){
+      const p = new URLSearchParams();
+      if (quick.value) p.set("quick", quick.value);
+      if (!quick.value && start.value) p.set("start", start.value);
+      if (!quick.value && end.value) p.set("end", end.value);
+      if (q.value) p.set("q", q.value);
+      p.set("page", page.value);
+      p.set("pageSize", pageSize.value);
+      return p.toString();
+    }
+
+    async function load(){
+      const res = await fetch(`${API_BASE}/vehicle-log?${queryParams()}`);
+      const data = await res.json();
+      total.value = data.total || 0;
+      items.value = data.items || [];
+      charts.value = data.chart || charts.value;
+      kpi.value = data.kpi || kpi.value;
+
+      renderCharts();
+      renderSparks();
+    }
+
+    function renderCharts(){
+      // Area trend + MA7
+      const labels = charts.value.daily.labels;
+      const series = charts.value.daily.series;
+      const ma7 = movingAverage(series, 7);
+
+      destroyIf(chartTrend);
+      chartTrend = new ApexCharts(document.querySelector("#chart-trend"), {
+        chart: { type: "area", height: 300, toolbar: { show: false }, animations: { easing: "easeinout", speed: 500 } },
+        dataLabels: { enabled: false },
+        stroke: { curve: "smooth", width: 2 },
+        colors: ["#2563eb", "#10b981"],
+        fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05, stops: [0, 100] } },
+        xaxis: { categories: labels },
+        yaxis: { labels: { formatter: v => Math.round(v) } },
+        series: [
+          { name: "Lượt/ngày", data: series },
+          { name: "MA7", data: ma7 }
+        ],
+        tooltip: { x: { show: true } }
+      });
+      chartTrend.render();
+
+      // Hourly line
+      destroyIf(chartHour);
+      chartHour = new ApexCharts(document.querySelector("#chart-hour"), {
+        chart: { type: "line", height: 300, toolbar: { show: false } },
+        dataLabels: { enabled: false },
+        stroke: { curve: "smooth", width: 2 },
+        xaxis: { categories: charts.value.hours.labels, title: { text: "Giờ" } },
+        yaxis: { labels: { formatter: v => Math.round(v) } },
+        series: [{ name: "Lượt/giờ", data: charts.value.hours.series }]
+      });
+      chartHour.render();
+
+      // Top 10 horizontal bar
+      destroyIf(chartTop);
+      chartTop = new ApexCharts(document.querySelector("#chart-top"), {
+        chart: { type: "bar", height: 340, toolbar: { show: false } },
+        plotOptions: { bar: { horizontal: true, borderRadius: 6, barHeight: "70%" } },
+        dataLabels: { enabled: true },
+        xaxis: { categories: charts.value.top10.labels },
+        series: [{ name: "Lượt", data: charts.value.top10.series }],
+        colors: ["#f59e0b"]
+      });
+      chartTop.render();
+
+      // Heatmap Ngày x Giờ
+      destroyIf(chartHeatmap);
+      const heatSeries = charts.value.heatmap.rows.map((day, i) => ({
+        name: day,
+        data: charts.value.heatmap.matrix[i].map((v, j) => ({ x: charts.value.heatmap.cols[j], y: v }))
+      }));
+      chartHeatmap = new ApexCharts(document.querySelector("#chart-heatmap"), {
+        chart: { type: "heatmap", height: 340, toolbar: { show: false } },
+        plotOptions: { heatmap: { shadeIntensity: 0.5, radius: 4, useFillColorAsStroke: false } },
+        dataLabels: { enabled: false },
+        colors: ["#dbeafe", "#93c5fd", "#3b82f6", "#1d4ed8", "#7c3aed", "#dc2626"],
+        series: heatSeries,
+        xaxis: { title: { text: "Giờ" } },
+        yaxis: { labels: { show: false } }
+      });
+      chartHeatmap.render();
+    }
+
+    function renderSparks(){
+      // Simple sparklines using daily
+      const s = charts.value.daily.series.slice(-14);
+      spark("#spark-total", s, "#2563eb");
+      spark("#spark-hour", charts.value.hours.series.slice(0,24), "#10b981");
+      spark("#spark-top", charts.value.top10.series, "#f59e0b");
+      const rolling = s.map((_,i)=>avg(s.slice(0,i+1)));
+      spark("#spark-avg", rolling, "#64748b");
+    }
+
+    function spark(sel, data, color){
+      const el = document.querySelector(sel);
+      el.innerHTML = "";
+      new ApexCharts(el, {
+        chart: { type: "area", height: 40, sparkline: { enabled: true } },
+        stroke: { curve: "smooth", width: 2 },
+        fill: { opacity: 0.3 },
+        colors: [color],
+        series: [{ data }]
+      }).render();
+    }
+
+    function avg(arr){ if(!arr.length) return 0; return Math.round(arr.reduce((a,b)=>a+b,0)/arr.length); }
+    function movingAverage(arr, n){
+      if (!arr || !arr.length) return [];
+      const out=[]; let sum=0;
+      for (let i=0;i<arr.length;i++){ sum+=arr[i]; if(i>=n) sum-=arr[i-n]; out.push(i>=n-1? Math.round(sum/Math.min(n,i+1)) : null); }
+      return out;
+    }
+    function destroyIf(chart){ if (chart && chart.destroy) chart.destroy(); }
+
+    function next(){ if (page.value < totalPages.value){ page.value++; load(); } }
+    function prev(){ if (page.value > 1){ page.value--; load(); } }
+
+    async function exportExcel(){
+      const url = `${API_BASE}/vehicle-log/export?${queryParams()}`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `nhat_ky_xe_${new Date().toISOString().slice(0,10)}.xlsx`;
+      a.click();
+    }
+
+    onMounted(load);
+    watch([quick, start, end, q], ()=>{ page.value = 1; });
+
+    return { quick, start, end, q, total, page, pageSize, totalPages, items, kpi, load, next, prev, exportExcel };
+  }
+}).mount("#app");
+</script>
+</body>
+</html>
