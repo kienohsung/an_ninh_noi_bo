@@ -1,53 +1,45 @@
-# BACKEND/app/config.py
+# File: backend/app/config.py
+from pydantic_settings import BaseSettings
+from typing import List, Optional
 import os
 import json
-from dotenv import load_dotenv
 
-# Nạp .env (nếu có lỗi format vẫn bỏ qua, để server không chết khi import)
-try:
-    load_dotenv()
-except Exception:
-    pass
+class Settings(BaseSettings):
+    # Cấu hình gốc của dự án
+    DATABASE_URL: str = "sqlite:///./security_v2_3.db"
+    SECRET_KEY: str = "change_me_in_production"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480 # 8 hours
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 10080 # 7 days
+    ALGORITHM: str = "HS256"
+    CORS_ORIGINS: List[str] = [
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:5174",
+        "http://localhost:5174",
+        "http://192.168.223.176:5173",
+        "http://192.168.223.176:5174"
+    ]
+    UPLOAD_DIR: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads"))
+    TZ: str = "Asia/Bangkok"
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "admin123"
+    GEMINI_API_KEY: Optional[str] = None
+    ID_CARD_EXTRACTOR_URL: str = "http://127.0.0.1:5009/extract"
 
-def _safe_json_or_pairs(val: str) -> dict:
-    """
-    Parse ARCHIVE_SHEETS từ JSON hoặc dạng "2024=idA;2025=idB".
-    """
-    if not val:
-        return {}
-    # thử JSON
-    try:
-        obj = json.loads(val)
-        if isinstance(obj, dict):
-            return {str(k): str(v) for k, v in obj.items()}
-    except Exception:
-        pass
-    # thử dạng cặp key=value;key=value
-    out = {}
-    for part in [p.strip() for p in val.split(";") if p.strip()]:
-        if "=" in part:
-            k, v = part.split("=", 1)
-            out[k.strip()] = v.strip()
-    return out
+    # --- Cấu hình mới cho Google Sheets ---
+    GSHEETS_CREDENTIALS_PATH: str = "credentials.json"
+    GSHEETS_LIVE_SHEET_ID: str = ""
+    GSHEETS_ARCHIVE_MAP_JSON: str = "{}" # e.g., '{"2024": "id1", "2025": "id2"}'
+    GSHEETS_SHEET_NAME: str = "Trang tính1"
 
-class Settings:
-    # Các biến môi trường & mặc định an toàn
-    GSHEETS_CREDENTIALS_PATH: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "./credentials.json")
-    GSHEETS_LIVE_SHEET_ID: str = os.getenv("LIVE_SHEET_ID", "").strip()
-    GSHEETS_ARCHIVE_SHEETS: dict = _safe_json_or_pairs(os.getenv("ARCHIVE_SHEETS", ""))
-    GSHEETS_SHEET_NAME: str = os.getenv("SHEET_NAME", "Trang tính1")
-    TZ: str = os.getenv("TIMEZONE", "Asia/Ho_Chi_Minh")
-    # Database (mặc định dùng SQLite file local)
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./app.db")
+    class Config:
+        # Pydantic V2 config
+        env_file = os.path.join(os.path.dirname(__file__), "..", ".env")
+        env_file_encoding = "utf-8"
 
-    # CORS
-    _raw_allow = os.getenv("ALLOW_ORIGINS", "*").strip()
-    if _raw_allow == "*":
-        ALLOW_ORIGINS = ["*"]
-    else:
-        ALLOW_ORIGINS = [o.strip() for o in _raw_allow.split(",") if o.strip()]
-
-# Tạo instance settings cho các module khác import
+# Tạo một instance duy nhất của Settings
 settings = Settings()
 
-__all__ = ["settings"]
+# Đảm bảo thư mục upload tồn tại
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
