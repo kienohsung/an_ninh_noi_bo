@@ -1,4 +1,4 @@
-// File: security_mgmt_dev/frontend/src/router/index.js
+// File: frontend/src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import MainLayout from '../layouts/MainLayout.vue'
@@ -8,7 +8,9 @@ import RegisterGuest from '../pages/RegisterGuest.vue'
 import GuardGate from '../pages/GuardGate.vue'
 import SuppliersPage from '../pages/SuppliersPage.vue'
 import UsersPage from '../pages/UsersPage.vue'
-import LongTermGuestsPage from '../pages/LongTermGuestsPage.vue' // <-- Trang mới
+import LongTermGuestsPage from '../pages/LongTermGuestsPage.vue'
+// (BƯỚC 1) IMPORT TRANG MỚI
+import VehicleLogPage from '../pages/VehicleLogPage.vue'
 
 function defaultRouteForRole (role) {
   if (role === 'admin' || role === 'manager') return '/dashboard'
@@ -32,9 +34,10 @@ const routes = [
       }},
       { path: 'dashboard', component: DashboardPage, meta: { roles: ['admin','manager'] } },      
       { path: 'register-guest', component: RegisterGuest, meta: { roles: ['admin','manager','staff'] } },
-      // Route mới cho quản lý khách dài hạn
       { path: 'long-term-guests', component: LongTermGuestsPage, meta: { roles: ['admin','manager','staff'] } },
       { path: 'guard-gate', component: GuardGate, meta: { roles: ['admin','guard'] } },
+      // (BƯỚC 2) THÊM ĐỊNH NGHĨA ROUTE MỚI
+      { path: 'vehicle-log', component: VehicleLogPage, meta: { roles: ['admin', 'manager'] } },
       { path: 'suppliers', component: SuppliersPage, meta: { roles: ['admin','manager'] } },
       { path: 'users', component: UsersPage, meta: { roles: ['admin','manager'] } }
     ]
@@ -55,3 +58,4 @@ router.beforeEach((to, from, next) => {
 })
 
 export default router
+

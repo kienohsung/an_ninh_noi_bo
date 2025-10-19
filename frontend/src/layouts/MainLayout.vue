@@ -20,11 +20,6 @@
           <q-item-section>Dashboard</q-item-section>
         </q-item>
 
-        <q-item v-if="['admin','manager'].includes(auth.user?.role)" clickable v-ripple to="/vehicle-log">
-          <q-item-section avatar><q-icon name="bar_chart"/></q-item-section>
-          <q-item-section>Nhật ký xe</q-item-section>
-        </q-item>
-
         <q-item v-if="['admin','manager','staff'].includes(auth.user?.role)" clickable v-ripple to="/register-guest">
           <q-item-section avatar><q-icon name="person_add"/></q-item-section>
           <q-item-section>Đăng ký khách</q-item-section>
@@ -38,6 +33,12 @@
         <q-item v-if="['admin','guard'].includes(auth.user?.role)" clickable v-ripple to="/guard-gate">
           <q-item-section avatar><q-icon name="login"/></q-item-section>
           <q-item-section>Cổng bảo vệ</q-item-section>
+        </q-item>
+
+        <!-- MỤC MENU MỚI CHO NHẬT KÝ XE -->
+        <q-item v-if="['admin','manager'].includes(auth.user?.role)" clickable v-ripple to="/vehicle-log">
+          <q-item-section avatar><q-icon name="local_shipping" /></q-item-section>
+          <q-item-section>Nhật ký xe</q-item-section>
         </q-item>
 
         <q-item v-if="['admin','manager'].includes(auth.user?.role)" clickable v-ripple to="/suppliers">

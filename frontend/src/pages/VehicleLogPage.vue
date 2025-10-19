@@ -1,253 +1,316 @@
 <!-- File: frontend/src/pages/VehicleLogPage.vue -->
 <template>
   <q-page padding>
-    <div class="text-h6 q-mb-md">Nhật ký xe</div>
+    <div class="q-gutter-y-md">
 
-    <!-- Toolbar -->
-    <q-card class="q-mb-md">
-      <q-card-section>
-        <div class="row q-col-gutter-md items-end">
-          <div class="col-12 col-sm-6 col-md-2">
-            <q-select dense outlined v-model="filters.quick" :options="quickOptions" label="Khoảng nhanh" emit-value map-options clearable @clear="filters.quick = null" />
-          </div>
-          <div class="col-12 col-sm-6 col-md-2">
-            <q-input dense outlined v-model="filters.start" mask="date" label="Từ ngày" :disable="!!filters.quick">
-              <template #append><q-icon name="event" class="cursor-pointer"><q-popup-proxy cover><q-date v-model="filters.start" /></q-popup-proxy></q-icon></template>
+      <!-- Toolbar Lọc -->
+      <q-card>
+        <q-card-section>
+          <div class="row q-col-gutter-md items-center">
+            <q-select
+              v-model="filters.quick"
+              :options="quickRangeOptions"
+              label="Khoảng nhanh"
+              dense outlined
+              emit-value map-options
+              class="col-12 col-sm-6 col-md-2"
+              @update:model-value="applyQuickRange"
+            />
+            <q-input
+              v-model="filters.start"
+              label="Từ ngày"
+              dense outlined
+              type="date"
+              class="col-6 col-sm-3 col-md-2"
+              :disable="!!filters.quick"
+            />
+            <q-input
+              v-model="filters.end"
+              label="Đến ngày"
+              dense outlined
+              type="date"
+              class="col-6 col-sm-3 col-md-2"
+              :disable="!!filters.quick"
+            />
+            <q-input
+              v-model="filters.q"
+              label="Tìm số xe"
+              dense outlined
+              class="col-12 col-md-3"
+              clearable
+              @keyup.enter="fetchData"
+            >
+              <template #append><q-icon name="search" /></template>
             </q-input>
+            <div class="col-12 col-md-3">
+              <q-btn
+                label="Xuất Excel"
+                icon="download"
+                color="positive"
+                @click="exportExcel"
+                class="full-width"
+              />
+            </div>
           </div>
-          <div class="col-12 col-sm-6 col-md-2">
-            <q-input dense outlined v-model="filters.end" mask="date" label="Đến ngày" :disable="!!filters.quick">
-              <template #append><q-icon name="event" class="cursor-pointer"><q-popup-proxy cover><q-date v-model="filters.end" /></q-popup-proxy></q-icon></template>
-            </q-input>
+        </q-card-section>
+      </q-card>
+
+      <!-- CẢI TIẾN: Vùng hiển thị lỗi hoặc loading -->
+      <q-card v-if="loading || error">
+        <q-card-section class="text-center">
+          <div v-if="loading">
+            <q-spinner-dots color="primary" size="40px" />
+            <div class="q-mt-sm text-grey-8">Đang tải dữ liệu...</div>
           </div>
-          <div class="col-12 col-sm-6 col-md-3">
-            <q-input dense outlined v-model="filters.q" label="Tìm theo biển số" clearable @clear="filters.q = ''" @keyup.enter="fetchData" />
+          <div v-if="error" class="text-negative">
+            <q-icon name="error" size="32px" />
+            <div class="text-h6 q-mt-sm">Không thể tải dữ liệu</div>
+            <div class="q-mt-xs text-grey-8">{{ error }}</div>
+            <q-btn
+              label="Thử lại"
+              color="primary"
+              class="q-mt-md"
+              @click="fetchData"
+              unelevated
+            />
           </div>
-          <div class="col-12 col-md-3">
-            <q-btn label="Xuất Excel" color="secondary" @click="exportExcel" :loading="exporting" class="full-width" />
+        </q-card-section>
+      </q-card>
+
+      <!-- Vùng hiển thị dữ liệu (chỉ hiện khi không có lỗi và không loading) -->
+      <div v-else class="q-gutter-y-md">
+        <!-- KPIs -->
+        <div class="row q-col-gutter-md">
+          <div v-for="k in kpiCards" :key="k.label" class="col-6 col-sm-3">
+            <q-card>
+              <q-card-section>
+                <div class="text-h6">{{ kpi[k.key] || '-' }}</div>
+                <div class="text-caption text-grey-7">{{ k.label }}</div>
+              </q-card-section>
+            </q-card>
           </div>
         </div>
-      </q-card-section>
-    </q-card>
-    
-    <!-- Loading and Error States -->
-    <div v-if="loading" class="text-center q-pa-lg">
-      <q-spinner-dots color="primary" size="40px" />
-      <div class="q-mt-sm">Đang tải dữ liệu...</div>
-    </div>
-    <div v-else-if="error" class="text-center q-pa-lg">
-      <q-icon name="error_outline" color="negative" size="40px" />
-      <div class="q-mt-sm text-negative">{{ error }}</div>
-      <q-btn label="Thử lại" color="primary" @click="fetchData" class="q-mt-md" />
-    </div>
 
-    <!-- Dashboard Content -->
-    <div v-else>
-      <!-- KPIs -->
-      <div class="row q-col-gutter-md q-mb-md">
-        <div v-for="k in kpiCards" :key="k.label" class="col-12 col-sm-6 col-md-3">
-          <q-card flat bordered>
-            <q-card-section>
-              <div class="text-h6">{{ k.value }}</div>
-              <div class="text-caption text-grey">{{ k.label }}</div>
-            </q-card-section>
-          </q-card>
+        <!-- Biểu đồ -->
+        <div class="row q-col-gutter-md">
+          <div class="col-12 col-lg-8">
+            <q-card>
+              <q-card-section>
+                <div class="text-subtitle1">Xu hướng theo ngày</div>
+                <apexchart type="area" height="300" :options="chartTrend.options" :series="chartTrend.series" />
+              </q-card-section>
+            </q-card>
+          </div>
+          <div class="col-12 col-lg-4">
+            <q-card>
+              <q-card-section>
+                <div class="text-subtitle1">Phân bố theo giờ</div>
+                <apexchart type="bar" height="300" :options="chartHour.options" :series="chartHour.series" />
+              </q-card-section>
+            </q-card>
+          </div>
         </div>
-      </div>
+        
+        <q-card>
+          <q-card-section>
+            <div class="text-subtitle1">Top 10 xe hoạt động nhiều</div>
+            <apexchart type="bar" height="350" :options="chartTop.options" :series="chartTop.series" />
+          </q-card-section>
+        </q-card>
 
-      <!-- Charts -->
-      <div class="row q-col-gutter-md q-mb-md">
-        <div class="col-12 col-lg-8"><q-card flat bordered><q-card-section><LineChart :series="chartSeries.trend" :options="chartOptions.trend" /></q-card-section></q-card></div>
-        <div class="col-12 col-lg-4"><q-card flat bordered><q-card-section><BarChart :series="chartSeries.hourly" :options="chartOptions.hourly" /></q-card-section></q-card></div>
-        <div class="col-12"><q-card flat bordered><q-card-section><BarChart :series="chartSeries.topPlates" :options="chartOptions.topPlates" type="bar" /></q-card-section></q-card></div>
+        <!-- Bảng dữ liệu -->
+        <q-table
+          title="Chi tiết nhật ký"
+          :rows="items"
+          :columns="columns"
+          row-key="plate"
+          v-model:pagination="pagination"
+          :rows-per-page-options="[10, 20, 50, 100]"
+          @request="handleTableRequest"
+          :loading="loading"
+          flat bordered
+        />
       </div>
-
-      <!-- Data Table -->
-      <q-table
-        flat bordered
-        title="Chi tiết lượt xe"
-        :rows="items"
-        :columns="columns"
-        row-key="plate"
-        v-model:pagination="pagination"
-        :rows-per-page-options="[10, 25, 50, 100]"
-        @request="onRequest"
-      />
     </div>
   </q-page>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch, computed } from 'vue';
+import { ref, reactive, onMounted, watch } from 'vue';
 import { useQuasar, date as qDate } from 'quasar';
 import api from '../api';
 import VueApexCharts from 'vue3-apexcharts';
 
-// Renaming components to avoid conflicts
-const BarChart = VueApexCharts;
-const LineChart = VueApexCharts;
-
 const $q = useQuasar();
 
+// --- State ---
 const loading = ref(true);
-const exporting = ref(false);
 const error = ref(null);
 
 const filters = reactive({
   quick: 'last7',
   start: '',
   end: '',
-  q: ''
+  q: '',
 });
 
-const quickOptions = [
-  { label: 'Hôm nay', value: 'today' },
-  { label: '7 ngày qua', value: 'last7' },
-  { label: '30 ngày qua', value: 'last30' },
-  { label: 'Tuần này', value: 'thisWeek' },
-  { label: 'Tháng này', value: 'thisMonth' },
-  { label: 'Tháng trước', value: 'prevMonth' },
-];
-
 const items = ref([]);
+const kpi = ref({ totalInRange: 0, peakHour: null, topPlate: null, avgPerDay: 0 });
 const pagination = ref({
   page: 1,
   rowsPerPage: 10,
   rowsNumber: 0
 });
 
-const kpiCards = ref([
-  { label: 'Tổng lượt xe', value: 0 },
-  { label: 'TB / ngày', value: 0 },
-  { label: 'Giờ cao điểm', value: '-' },
-  { label: 'Xe vào nhiều nhất', value: '-' }
-]);
+const kpiCards = [
+  { key: 'totalInRange', label: 'Tổng lượt' },
+  { key: 'avgPerDay', label: 'Trung bình/ngày' },
+  { key: 'peakHour', label: 'Giờ cao điểm' },
+  { key: 'topPlate', label: 'Xe nhiều nhất' }
+];
 
-const chartOptions = reactive({ trend: {}, hourly: {}, topPlates: {} });
-const chartSeries = reactive({ trend: [], hourly: [], topPlates: [] });
+const quickRangeOptions = [
+  { label: 'Hôm nay', value: 'today' },
+  { label: '7 ngày qua', value: 'last7' },
+  { label: '30 ngày qua', value: 'last30' },
+  { label: 'Tháng này', value: 'thisMonth' },
+  { label: 'Tháng trước', value: 'prevMonth' },
+  { label: '(Tùy chọn)', value: '' }
+];
 
 const columns = [
-  { name: 'plate', label: 'Biển số', field: 'plate', align: 'left', sortable: true },
-  { name: 'date', label: 'Ngày', field: 'date', align: 'left', sortable: true, format: val => qDate.formatDate(val, 'DD/MM/YYYY') },
+  { name: 'plate', label: 'Số xe', field: 'plate', align: 'left', sortable: true },
+  { name: 'date', label: 'Ngày', field: 'date', align: 'left', sortable: true },
   { name: 'time', label: 'Giờ', field: 'time', align: 'left', sortable: true },
 ];
 
-function updateChartData(chartData) {
-  // Trend Chart
-  chartOptions.trend = {
-    chart: { type: 'area', height: 350, toolbar: { show: false } },
-    xaxis: { type: 'datetime', categories: chartData.daily.labels },
-    stroke: { curve: 'smooth' },
-    dataLabels: { enabled: false },
-    title: { text: 'Xu hướng lượt xe theo ngày', align: 'left' }
-  };
-  chartSeries.trend = [{ name: 'Số lượt', data: chartData.daily.series }];
+// --- Chart Data & Options ---
+const chartTrend = reactive({ series: [], options: { chart: { type: 'area', height: 300, toolbar: { show: false } }, dataLabels: { enabled: false }, stroke: { curve: 'smooth' }, xaxis: { type: 'datetime' } } });
+const chartHour = reactive({ series: [], options: { chart: { type: 'bar', height: 300, toolbar: { show: false } }, plotOptions: { bar: { columnWidth: '80%' } }, dataLabels: { enabled: false }, xaxis: { categories: [] } } });
+const chartTop = reactive({ series: [], options: { chart: { type: 'bar', height: 350 }, plotOptions: { bar: { horizontal: true } }, dataLabels: { enabled: true, formatter: val => val }, xaxis: { categories: [] } } });
 
-  // Hourly Chart
-  chartOptions.hourly = {
-    chart: { type: 'bar', height: 350, toolbar: { show: false } },
-    plotOptions: { bar: { columnWidth: '50%' } },
-    xaxis: { categories: chartData.hours.labels, title: { text: 'Giờ trong ngày' } },
-    dataLabels: { enabled: false },
-    title: { text: 'Phân bố lượt xe theo giờ', align: 'left' }
-  };
-  chartSeries.hourly = [{ name: 'Số lượt', data: chartData.hours.series }];
+// --- CẢI TIẾN: Hàm khởi tạo dữ liệu mặc định để tránh lỗi 'undefined' ---
+const resetChartData = () => {
+    chartTrend.series = [];
+    chartHour.series = [];
+    chartTop.series = [];
+    chartTrend.options = { ...chartTrend.options, xaxis: { categories: [] } };
+    chartHour.options = { ...chartHour.options, xaxis: { categories: [] } };
+    chartTop.options = { ...chartTop.options, xaxis: { categories: [] } };
+};
 
-  // Top Plates Chart
-  chartOptions.topPlates = {
-    chart: { type: 'bar', height: 400, toolbar: { show: false } },
-    plotOptions: { bar: { horizontal: true } },
-    xaxis: { categories: chartData.top10.labels },
-    dataLabels: { enabled: true, textAnchor: 'start', style: { colors: ['#000'] }, offsetX: 0 },
-    title: { text: 'Top 10 xe vào nhiều nhất', align: 'left' }
-  };
-  chartSeries.topPlates = [{ name: 'Số lượt', data: chartData.top10.series }];
-}
+const updateChartData = (chartData) => {
+    // Luôn kiểm tra sự tồn tại của dữ liệu trước khi gán
+    if (chartData?.daily) {
+        chartTrend.series = [{ name: 'Lượt', data: chartData.daily.series }];
+        chartTrend.options = { ...chartTrend.options, xaxis: { categories: chartData.daily.labels } };
+    }
+    if (chartData?.hours) {
+        chartHour.series = [{ name: 'Lượt', data: chartData.hours.series }];
+        chartHour.options = { ...chartHour.options, xaxis: { categories: chartData.hours.labels } };
+    }
+    if (chartData?.top10) {
+        chartTop.series = [{ name: 'Lượt', data: chartData.top10.series }];
+        chartTop.options = { ...chartTop.options, xaxis: { categories: chartData.top10.labels } };
+    }
+};
 
+// --- Methods ---
+const applyQuickRange = (value) => {
+  if (!value) return;
+  const { start, end } = quick_range_to_dates(value);
+  filters.start = start;
+  filters.end = end;
+};
 
-async function fetchData(paginationReq) {
+const quick_range_to_dates = (quick) => {
+  const today = new Date();
+  const format = (d) => qDate.formatDate(d, 'YYYY-MM-DD');
+  if (quick === 'today') return { start: format(today), end: format(today) };
+  if (quick === 'last7') return { start: format(qDate.subtractFromDate(today, { days: 6 })), end: format(today) };
+  if (quick === 'last30') return { start: format(qDate.subtractFromDate(today, { days: 29 })), end: format(today) };
+  if (quick === 'thisMonth') return { start: format(qDate.startOfDate(today, 'month')), end: format(today) };
+  if (quick === 'prevMonth') {
+    const prev = qDate.subtractFromDate(today, { month: 1 });
+    return { start: format(qDate.startOfDate(prev, 'month')), end: format(qDate.endOfDate(prev, 'month')) };
+  }
+  return { start: '', end: '' };
+};
+
+const fetchData = async () => {
   loading.value = true;
   error.value = null;
+  // Reset dữ liệu biểu đồ để tránh hiển thị dữ liệu cũ khi có lỗi
+  resetChartData();
 
-  const page = paginationReq?.page || pagination.value.page;
-  const rowsPerPage = paginationReq?.rowsPerPage || pagination.value.rowsPerPage;
-  
   const params = new URLSearchParams({
-    page,
-    pageSize: rowsPerPage
+    page: pagination.value.page,
+    pageSize: pagination.value.rowsPerPage,
   });
-  if (filters.quick) params.set('quick', filters.quick);
-  if (filters.start && !filters.quick) params.set('start', qDate.formatDate(qDate.extractDate(filters.start, 'YYYY/MM/DD'), 'YYYY-MM-DD'));
-  if (filters.end && !filters.quick) params.set('end', qDate.formatDate(qDate.extractDate(filters.end, 'YYYY/MM/DD'), 'YYYY-MM-DD'));
-  if (filters.q) params.set('q', filters.q);
+  if (filters.quick) params.append('quick', filters.quick);
+  if (!filters.quick && filters.start) params.append('start', filters.start);
+  if (!filters.quick && filters.end) params.append('end', filters.end);
+  if (filters.q) params.append('q', filters.q);
 
   try {
     const { data } = await api.get('/vehicle-log', { params });
-    
-    items.value = data.items;
-    pagination.value.rowsNumber = data.total;
-    pagination.value.page = data.page;
-    pagination.value.rowsPerPage = data.pageSize;
-    
-    // (SỬA LỖI) Chỉ cập nhật chart và kpi nếu có dữ liệu
-    if (data.kpi && data.chart) {
-      kpiCards.value = [
-        { label: 'Tổng lượt xe', value: data.kpi.totalInRange },
-        { label: 'TB / ngày', value: data.kpi.avgPerDay },
-        { label: 'Giờ cao điểm', value: data.kpi.peakHour || '-' },
-        { label: 'Xe vào nhiều nhất', value: data.kpi.topPlate || '-' }
-      ];
-      updateChartData(data.chart);
-    } else {
-      // Reset to empty state if no chart data
-      updateChartData({ daily: {}, hours: {}, top10: {} });
-    }
-
+    items.value = data.items || [];
+    pagination.value.rowsNumber = data.total || 0;
+    kpi.value = data.kpi || kpi.value;
+    updateChartData(data.chart);
   } catch (err) {
-    console.error("Fetch data failed:", err);
-    error.value = "Không thể tải dữ liệu. Vui lòng kiểm tra log backend hoặc cấu hình Google Sheet.";
+    console.error("Lỗi khi tải dữ liệu:", err);
+    // CẢI TIẾN: Gán thông báo lỗi chi tiết để hiển thị trên UI
+    error.value = err.response?.data?.detail || err.message || 'Một lỗi không xác định đã xảy ra.';
+    // Reset các giá trị khác
+    items.value = [];
+    pagination.value.rowsNumber = 0;
   } finally {
     loading.value = false;
   }
-}
+};
 
-function onRequest(props) {
-  fetchData(props.pagination);
-}
+const handleTableRequest = (props) => {
+  pagination.value.page = props.pagination.page;
+  pagination.value.rowsPerPage = props.pagination.rowsPerPage;
+  fetchData();
+};
 
-async function exportExcel() {
-  exporting.value = true;
+const exportExcel = async () => {
   const params = new URLSearchParams();
-  if (filters.quick) params.set('quick', filters.quick);
-  if (filters.start && !filters.quick) params.set('start', qDate.formatDate(qDate.extractDate(filters.start, 'YYYY/MM/DD'), 'YYYY-MM-DD'));
-  if (filters.end && !filters.quick) params.set('end', qDate.formatDate(qDate.extractDate(filters.end, 'YYYY/MM/DD'), 'YYYY-MM-DD'));
-  if (filters.q) params.set('q', filters.q);
-
+  if (filters.quick) params.append('quick', filters.quick);
+  if (!filters.quick && filters.start) params.append('start', filters.start);
+  if (!filters.quick && filters.end) params.append('end', filters.end);
+  if (filters.q) params.append('q', filters.q);
+  
+  $q.loading.show({ message: 'Đang tạo file Excel...' });
   try {
     const response = await api.get('/vehicle-log/export', { params, responseType: 'blob' });
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
+    const filename = `NhatKyXe_Export_${new Date().toISOString().slice(0, 10)}.xlsx`;
     link.href = url;
-    link.setAttribute('download', `nhat_ky_xe_${Date.now()}.xlsx`);
+    link.setAttribute('download', filename);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  } catch (err) {
-    $q.notify({ type: 'negative', message: 'Xuất file thất bại.' });
+    window.URL.revokeObjectURL(url);
+  } catch(err) {
+    $q.notify({ type: 'negative', message: 'Xuất file Excel thất bại.' });
   } finally {
-    exporting.value = false;
+    $q.loading.hide();
   }
-}
+};
 
 watch(filters, () => {
-  // Use a debounce to avoid rapid firing
-  setTimeout(() => {
-    fetchData({ page: 1, rowsPerPage: pagination.value.rowsPerPage });
-  }, 300);
+  // Khi bộ lọc thay đổi, quay về trang 1
+  pagination.value.page = 1;
+  fetchData();
 }, { deep: true });
 
 onMounted(() => {
-  fetchData();
+  applyQuickRange(filters.quick);
+  // fetchData sẽ được gọi bởi watch ngay sau đó
 });
 </script>
 
