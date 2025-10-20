@@ -1,3 +1,5 @@
+# Hướng dẫn chạy dự án với tính năng telegram
+    
 # Hướng dẫn chạy dự án với tính năng mới
 1. chạy terminal số 1: 
     - cd id_card_extractor_service

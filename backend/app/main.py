@@ -9,15 +9,20 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import date, time, datetime
 from apscheduler.schedulers.background import BackgroundScheduler
-# --- THAY ĐỔI: Import thêm IntervalTrigger ---
 from apscheduler.triggers.interval import IntervalTrigger
+
+# --- FIX: Nạp .env ngay từ đầu ---
+from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=(Path(__file__).resolve().parent.parent / ".env"))
+# -----------------------------------
 
 from .config import settings
 from .database import Base, engine, SessionLocal
 from .utils.logging_config import setup_logging
 from . import models
 
-# (GIẢI PHÁP DỨT ĐIỂM) Import tường minh từng router object từ file cụ thể của nó
+# Import tường minh từng router object
 from .auth import router as auth_router, get_password_hash
 from .routers.users import router as users_router
 from .routers.guests import router as guests_router
@@ -25,7 +30,11 @@ from .routers.suppliers import router as suppliers_router
 from .routers.reports import router as reports_router
 from .routers.gemini import router as gemini_router
 from .routers.long_term_guests import router as long_term_guests_router
+# --- FIX: Import lại router cho Nhật Ký Xe ---
 from .routers.vehicle_log import router as vehicle_log_router
+# --- Router mới cho Telegram ---
+from .routers import guests_confirm, admin_telegram
+
 
 app = FastAPI(title="Ứng dụng an ninh nội bộ - Local Security App", version="2.6.2")
 
@@ -49,7 +58,12 @@ app.include_router(suppliers_router)
 app.include_router(reports_router)
 app.include_router(gemini_router)
 app.include_router(long_term_guests_router)
+# --- FIX: Đăng ký lại router cho Nhật Ký Xe ---
 app.include_router(vehicle_log_router)
+# --- Đăng ký router mới cho Telegram ---
+app.include_router(guests_confirm.router)
+app.include_router(admin_telegram.router)
+
 
 # --- Tác vụ nền cho khách dài hạn (giữ nguyên logic) ---
 def create_daily_guest_entries():
@@ -75,7 +89,6 @@ def create_daily_guest_entries():
 
             if not already_exists:
                 tz = pytz.timezone(settings.TZ)
-                # THAY ĐỔI NHỎ: Sử dụng thời gian hiện tại thay vì 8h sáng cố định
                 creation_time = datetime.now(tz)
                 new_guest = models.Guest(
                     full_name=lt_guest.full_name,
@@ -124,10 +137,9 @@ def on_startup():
     finally:
         db.close()
         
-    # --- CÀI ĐẶT SCHEDULER (ĐÃ CẬP NHẬT) ---
+    # Cài đặt Scheduler
     try:
         scheduler = BackgroundScheduler(timezone=settings.TZ)
-        # --- THAY ĐỔI: Chạy tác vụ mỗi 30 phút ---
         scheduler.add_job(
             create_daily_guest_entries,
             trigger=IntervalTrigger(minutes=30),
@@ -139,3 +151,4 @@ def on_startup():
         logging.info(f"Scheduler for long-term guests started. Will run every 30 minutes (Timezone: {settings.TZ}).")
     except Exception as e:
         logging.error(f"Could not start the scheduler: {e}", exc_info=True)
+
