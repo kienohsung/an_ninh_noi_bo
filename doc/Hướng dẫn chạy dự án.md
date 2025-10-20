@@ -21,4 +21,5 @@
 3. Chạy terminal số 3 (frontend):
     cd frontend
     npm install
+    npm install vue3-apexcharts
     npm run dev

@@ -1,4 +1,4 @@
-# File path: backend/app/main.py
+# File: backend/app/main.py
 import os
 import logging
 import pytz
@@ -9,44 +9,50 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import date, time, datetime
 from apscheduler.schedulers.background import BackgroundScheduler
-# --- THAY DOI: Import them IntervalTrigger ---
+# --- THAY ĐỔI: Import thêm IntervalTrigger ---
 from apscheduler.triggers.interval import IntervalTrigger
 
 from .config import settings
 from .database import Base, engine, SessionLocal
 from .utils.logging_config import setup_logging
-from .auth import router as auth_router, get_password_hash
 from . import models
-# Thêm router mới
-from .routers import users, guests, suppliers, reports, gemini, long_term_guests
 
-# Cập nhật lại phiên bản và tiêu đề ứng dụng
-app = FastAPI(title="Ứng dụng an ninh nội bộ - Local Security App", version="2.5.0")
+# (GIẢI PHÁP DỨT ĐIỂM) Import tường minh từng router object từ file cụ thể của nó
+from .auth import router as auth_router, get_password_hash
+from .routers.users import router as users_router
+from .routers.guests import router as guests_router
+from .routers.suppliers import router as suppliers_router
+from .routers.reports import router as reports_router
+from .routers.gemini import router as gemini_router
+from .routers.long_term_guests import router as long_term_guests_router
+from .routers.vehicle_log import router as vehicle_log_router
+
+app = FastAPI(title="Ứng dụng an ninh nội bộ - Local Security App", version="2.6.2")
 
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # hoặc liệt kê cụ thể ["http://192.168.10.55:5174"]
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# KÍCH HOẠT LẠI STATICFILES: Cho phép frontend truy cập ảnh trong thư mục /uploads
+# Static Files cho ảnh upload
 app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
 
-# Routers
+# Khai báo tất cả các router
 app.include_router(auth_router)
-app.include_router(users.router)
-app.include_router(guests.router)
-app.include_router(suppliers.router)
-app.include_router(reports.router)
-app.include_router(gemini.router) 
-app.include_router(long_term_guests.router) # Router mới cho khách dài hạn
+app.include_router(users_router)
+app.include_router(guests_router)
+app.include_router(suppliers_router)
+app.include_router(reports_router)
+app.include_router(gemini_router)
+app.include_router(long_term_guests_router)
+app.include_router(vehicle_log_router)
 
-# --- LOGIC MỚI: TÁC VỤ TỰ ĐỘNG ---
+# --- Tác vụ nền cho khách dài hạn (giữ nguyên logic) ---
 def create_daily_guest_entries():
-    """Tác vụ chạy hàng ngày để tạo bản ghi cho khách dài hạn."""
     db: Session = SessionLocal()
     try:
         today = date.today()
@@ -68,10 +74,9 @@ def create_daily_guest_entries():
             ).first()
 
             if not already_exists:
-                # Tạo bản ghi mới vào 8h sáng
                 tz = pytz.timezone(settings.TZ)
-                creation_time = tz.localize(datetime.combine(today, time(8, 0)))
-                
+                # THAY ĐỔI NHỎ: Sử dụng thời gian hiện tại thay vì 8h sáng cố định
+                creation_time = datetime.now(tz)
                 new_guest = models.Guest(
                     full_name=lt_guest.full_name,
                     id_card_number=lt_guest.id_card_number,
@@ -96,7 +101,7 @@ def create_daily_guest_entries():
     finally:
         db.close()
 
-# DB init & seed
+# --- Sự kiện khởi động ứng dụng ---
 @app.on_event("startup")
 def on_startup():
     setup_logging()
@@ -119,10 +124,10 @@ def on_startup():
     finally:
         db.close()
         
-    # --- CÀI ĐẶT SCHEDULER ---
+    # --- CÀI ĐẶT SCHEDULER (ĐÃ CẬP NHẬT) ---
     try:
         scheduler = BackgroundScheduler(timezone=settings.TZ)
-        # --- THAY DOI: Chay tac vu moi 30 phut ---
+        # --- THAY ĐỔI: Chạy tác vụ mỗi 30 phút ---
         scheduler.add_job(
             create_daily_guest_entries,
             trigger=IntervalTrigger(minutes=30),
@@ -134,4 +139,3 @@ def on_startup():
         logging.info(f"Scheduler for long-term guests started. Will run every 30 minutes (Timezone: {settings.TZ}).")
     except Exception as e:
         logging.error(f"Could not start the scheduler: {e}", exc_info=True)
-

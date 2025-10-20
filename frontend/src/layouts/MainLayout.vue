@@ -1,4 +1,4 @@
-<!-- File: security_mgmt_dev/frontend/src/layouts/MainLayout.vue -->
+<!-- File: frontend/src/layouts/MainLayout.vue -->
 <template>
   <q-layout view="lHh Lpr lFf">
     <q-header elevated>
@@ -20,13 +20,11 @@
           <q-item-section>Dashboard</q-item-section>
         </q-item>
 
-
         <q-item v-if="['admin','manager','staff'].includes(auth.user?.role)" clickable v-ripple to="/register-guest">
           <q-item-section avatar><q-icon name="person_add"/></q-item-section>
           <q-item-section>Đăng ký khách</q-item-section>
         </q-item>
         
-        <!-- MỤC MỚI: QUẢN LÝ KHÁCH DÀI HẠN -->
         <q-item v-if="['admin','manager','staff'].includes(auth.user?.role)" clickable v-ripple to="/long-term-guests">
           <q-item-section avatar><q-icon name="event_repeat"/></q-item-section>
           <q-item-section>Khách dài hạn</q-item-section>
@@ -35,6 +33,12 @@
         <q-item v-if="['admin','guard'].includes(auth.user?.role)" clickable v-ripple to="/guard-gate">
           <q-item-section avatar><q-icon name="login"/></q-item-section>
           <q-item-section>Cổng bảo vệ</q-item-section>
+        </q-item>
+
+        <!-- MỤC MENU MỚI CHO NHẬT KÝ XE -->
+        <q-item v-if="['admin','manager'].includes(auth.user?.role)" clickable v-ripple to="/vehicle-log">
+          <q-item-section avatar><q-icon name="local_shipping" /></q-item-section>
+          <q-item-section>Nhật ký xe</q-item-section>
         </q-item>
 
         <q-item v-if="['admin','manager'].includes(auth.user?.role)" clickable v-ripple to="/suppliers">
@@ -69,3 +73,4 @@ function logout () {
   router.push('/login')
 }
 </script>
+
