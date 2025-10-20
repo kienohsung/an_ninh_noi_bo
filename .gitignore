@@ -44,6 +44,11 @@ frontend/node_modules/
 backend/credentials.json
 
 doc/Telegram_info.md
+
 backend/uploads/guests
 backend/uploads
 backend/uploads/archived_guests
+
+backend/telegram_last_message_id.txt
+
+
