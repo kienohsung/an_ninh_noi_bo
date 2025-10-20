@@ -21,3 +21,7 @@ xlsxwriter==3.2.0
 # Các thư viện mới được bổ sung
 requests==2.32.3  # Cần thiết cho API proxy đến dịch vụ quét CCCD
 apscheduler==3.10.4  # Cần thiết cho tác vụ nền tự động tạo khách dài hạn
+
+# THư viện cho tính năng telegram và offline mode
+
+requests>=2.31.0

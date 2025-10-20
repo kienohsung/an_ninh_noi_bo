@@ -187,17 +187,6 @@ db.version(1).stores({
 
 ---
 
-## 3) Phụ lục: Tương tác với các cải tiến sẵn có
-
-### 3.1. Liên hệ với MA7/MA14 & Masking biển số
-
-* **MA7/MA14**: không ảnh hưởng tới PWA/Telegram.
-* **Masking**:
-
-  * **PWA cache** lưu **giá trị plate đã mask theo role hiện hành** hoặc lưu `plate_norm` + mask ở UI (khuyến nghị: **mask ở backend trước khi trả** để thống nhất).
-  * **Telegram**: tuỳ cấu hình kênh, nếu nhóm chỉ dành cho bộ phận an ninh → **cho phép full**. Ngược lại → áp dụng mask.
-
----
 
 ## 4) Roadmap & PR breakdown
 
@@ -227,7 +216,6 @@ db.version(1).stores({
 
 ---
 
-Nếu bạn đồng ý, mình có thể soạn ngay **mẫu file**:
 
 * `src-pwa/custom-service-worker.js` (Workbox route + stale-while-revalidate + IndexedDB bridge),
 * `src/pwa/db/guard-gate-db.ts` (Dexie schema),

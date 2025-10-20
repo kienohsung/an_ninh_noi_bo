@@ -23,9 +23,16 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     ID_CARD_EXTRACTOR_URL: str = "http://127.0.0.1:5009/extract"
 
+    # --- SỬA LỖI: Thêm các biến môi trường cho Telegram vào đây ---
+    NOTIFY_TELEGRAM_ENABLED: bool = False
+    TELEGRAM_BOT_TOKEN: str = "8014586502:AAFSMiARi8xIB6d26vaGiHbr-QQciJFDd5k"
+    TELEGRAM_CHAT_ID: str = "-4898009736"
+    # ---------------------------------------------------------
+
     # --- Cấu hình mới cho Google Sheets ---
     GSHEETS_CREDENTIALS_PATH: str = "credentials.json"
-    GSHEETS_LIVE_SHEET_ID: str = ""
+    GSHEETS_LIVE_SHEET_ID: str = "1zenHc1PuDHvVcuctJnTVp8tdD-3xWMf36ozynLk7jHw"
+    
     # SỬA LỖI: Đổi tên biến GSHEETS_ARCHIVE_MAP_JSON thành GSHEETS_ARCHIVE_SHEETS
     # và thay đổi kiểu dữ liệu để nó tự động parse JSON
     GSHEETS_ARCHIVE_SHEETS: Dict[str, str] = {} # e.g., {"2024": "id1", "2025": "id2"}
@@ -37,4 +44,3 @@ class Settings(BaseSettings):
 
 settings = Settings()
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-

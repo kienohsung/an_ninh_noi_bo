@@ -1,10 +1,19 @@
-<!-- File: security_mgmt_dev/frontend/src/pages/GuardGate.vue -->
+<!-- File: frontend/src/pages/GuardGate.vue (Updated with PWA/Offline features) -->
 <template>
   <q-page padding>
     <div class="row items-center justify-between q-mb-sm q-gutter-sm">
       <div class="text-h6">Cổng bảo vệ</div>
-       <div class="row items-center q-gutter-sm">
-        <!-- NÚT BẬT/TẮT ÂM THANH -->
+      <div class="row items-center q-gutter-sm">
+        <!-- PWA/Offline Status Badge -->
+        <q-badge v-if="offline" color="orange" text-color="black">
+          <q-icon name="cloud_off" class="q-mr-xs" />
+          Offline
+        </q-badge>
+        <div v-if="cachedAt" class="text-caption text-grey-7">
+          Cache: {{ new Date(cachedAt).toLocaleString('vi-VN') }}
+        </div>
+        
+        <!-- Audio Toggle Button -->
         <q-btn 
           flat 
           round 
@@ -15,6 +24,7 @@
           <q-tooltip>{{ audioEnabled ? 'Tắt thông báo' : 'Bật thông báo âm thanh' }}</q-tooltip>
         </q-btn>
         
+        <!-- Search and Actions -->
         <q-input dense outlined v-model="q" placeholder="Tìm kiếm..." style="min-width: 280px" clearable @clear="load" @keyup.enter="load">
           <template #append><q-icon name="search" class="cursor-pointer" @click="load" /></template>
         </q-input>
@@ -79,6 +89,9 @@ import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useQuasar, exportFile as qExportFile } from 'quasar' 
 import api from '../api'
 import { useAuthStore } from '../stores/auth'
+// PWA Imports
+import { getGuestsSnapshot, saveGuestsSnapshot, enqueueConfirm, drainQueue } from '../pwa/db/guard-gate-db'
+import { registerServiceWorker } from '../register-sw'
 
 const $q = useQuasar()
 const auth = useAuthStore()
@@ -91,18 +104,20 @@ const q = ref('')
 const fileInputRef = ref(null)
 let timer = null
 
-// --- LOGIC MỚI CHO THÔNG BÁO ÂM THANH ---
-// Đọc trạng thái đã lưu từ localStorage khi component được tải. Mặc định là false.
+// --- PWA State Refs ---
+const cachedAt = ref(null)
+const offline = ref(false)
+
+// --- Audio Notification Logic ---
 const audioEnabled = ref(localStorage.getItem('guard_audio_enabled') === 'true');
 const previousPendingCount = ref(0)
-let notificationSound = null // Sẽ được khởi tạo khi component mounted
+let notificationSound = null
 
 function toggleAudio() {
-  if (!notificationSound) { // Phòng trường hợp audio chưa được khởi tạo
+  if (!notificationSound) {
     notificationSound = new Audio('/notification.mp3');
   }
   
-  // Đảo ngược trạng thái và lưu vào localStorage
   audioEnabled.value = !audioEnabled.value;
   localStorage.setItem('guard_audio_enabled', audioEnabled.value);
 
@@ -113,7 +128,6 @@ function toggleAudio() {
       message: 'Đã bật thông báo âm thanh.',
       position: 'top'
     });
-    // Phát thử một lần để xác nhận và lấy quyền từ trình duyệt
     notificationSound.play().catch(e => console.error("Audio play failed on toggle:", e));
   } else {
     $q.notify({
@@ -125,7 +139,6 @@ function toggleAudio() {
   }
 }
 
-// Cột cho bảng "Khách chờ vào" (bao gồm actions)
 const columns = [
   { name: 'full_name', align: 'left', label: 'Họ tên', field: 'full_name', sortable: true },
   { name: 'id_card_number', align: 'left', label: 'CCCD', field: 'id_card_number', sortable: true },
@@ -141,12 +154,12 @@ const columns = [
 const checkedInColumns = computed(() => columns.filter(col => col.name !== 'actions'))
 
 async function load () {
+  const userId = auth.user?.id || 'anon'
   try {
     const res = await api.get('/guests', { params: { q: q.value || undefined, include_all_my_history: true } })
     const rows = res.data || []
     
     const newPendingCount = rows.filter(r => r.status === 'pending').length;
-    // Chỉ phát âm thanh nếu tính năng được bật, audio đã sẵn sàng và có khách mới
     if (audioEnabled.value && notificationSound && newPendingCount > previousPendingCount.value) {
       notificationSound.play().catch(e => console.error("Audio play failed on new guest:", e));
     }
@@ -154,16 +167,52 @@ async function load () {
 
     pending.value = rows.filter(r => r.status === 'pending')
     checkedIn.value = rows.filter(r => r.status === 'checked_in')
+
+    // FIX: Convert reactive arrays to plain JS objects before saving to Dexie
+    const plainPending = JSON.parse(JSON.stringify(pending.value));
+    const plainCheckedIn = JSON.parse(JSON.stringify(checkedIn.value));
+    await saveGuestsSnapshot(userId, { pending: plainPending, checkedIn: plainCheckedIn });
+
+    cachedAt.value = new Date().toISOString()
+    offline.value = false // We are online if this succeeds
+
   } catch (error) {
     if(timer) clearInterval(timer);
-    $q.notify({type: 'negative', message: 'Không tải được danh sách khách. Đã tạm dừng tự động làm mới.'})
+    // Only show notification if it's a real network error, not Dexie error
+    if (error.name !== 'DexieError') {
+      $q.notify({type: 'negative', message: 'Không tải được danh sách khách. Đã tạm dừng tự động làm mới.'})
+    }
     console.error("Failed to load guests", error)
+    offline.value = true // Assume offline on network error
   }
 }
 
 async function confirmIn (row) {
+  // Offline handling
+  if (!navigator.onLine) {
+    await enqueueConfirm(row.id)
+    $q.notify({ type:'warning', message: 'Đã xếp hàng xác nhận. Sẽ đồng bộ khi online.'})
+
+    // UX IMPROVEMENT: Optimistic UI Update
+    const index = pending.value.findIndex(p => p.id === row.id);
+    if (index > -1) {
+        const [confirmedGuest] = pending.value.splice(index, 1);
+        confirmedGuest.status_display = 'Chờ đồng bộ'; // temporary status
+        checkedIn.value.unshift(confirmedGuest); // Add to top of checkedIn list
+    }
+
+    try { 
+      const registration = await navigator.serviceWorker.ready;
+      await registration.sync.register('sync-confirm') 
+    } catch(e){
+      console.error('Background Sync registration failed:', e);
+    }
+    return
+  }
+  
+  // Online handling
   try {
-    await api.post(`/guests/${row.id}/confirm_checkin`)
+    await api.post(`/guests/${row.id}/confirm-in`)
     $q.notify({type: 'positive', message: `${row.full_name} đã được xác nhận vào.`})
     load()
   } catch(error) {
@@ -171,6 +220,18 @@ async function confirmIn (row) {
   }
 }
 
+// --- New PWA Function ---
+async function flushQueue() {
+  await drainQueue(async (item) => {
+    if (item.type === 'confirmIn') {
+      await api.post(`/guests/${item.payload.guestId}/confirm-in`)
+    }
+  })
+  // After flushing, reload data from network
+  await load()
+}
+
+// --- Existing Functions (handleImport, exportGuests, clearData) are unchanged ---
 async function handleImport(event) {
   const file = event.target.files[0]
   if (!file) return
@@ -244,10 +305,8 @@ function clearData() {
 
 
 onMounted(async () => {
-  // Khởi tạo đối tượng Audio khi component được gắn vào
+  // Initialize audio object
   notificationSound = new Audio('/notification.mp3');
-
-  // Nếu trạng thái đã được bật từ trước, hiện thông báo nhắc nhở
   if (audioEnabled.value) {
     $q.notify({
       type: 'info',
@@ -257,14 +316,48 @@ onMounted(async () => {
       timeout: 2500
     });
   }
-
-  await load()
+  
+  // --- PWA Initialization Logic ---
+  registerServiceWorker()
+  
+  // 1. Load snapshot from local DB first for instant UI
+  const userId = auth.user?.id || 'anon'
+  const snap = await getGuestsSnapshot(userId)
+  if (snap?.data) {
+    pending.value = snap.data.pending || []
+    checkedIn.value = snap.data.checkedIn || []
+    cachedAt.value = snap.cachedAt
+    offline.value = !navigator.onLine
+  }
+  
+  // 2. Then fetch fresh data from network if online
+  if (navigator.onLine) {
+    await load()
+  }
   previousPendingCount.value = pending.value.length;
+  
+  // 3. Listen for messages from Service Worker (for cache updates, background sync)
+  navigator.serviceWorker?.addEventListener('message', async (e) => {
+    const { type } = e.data || {}
+    if (type === 'GUESTS_REFRESHED') {
+      await load() // SW informs that network data is fresh, reload UI
+    }
+    if (type === 'SYNC_CONFIRM') {
+      await flushQueue() // SW informs that a background sync is triggered
+    }
+  })
+  
+  // 4. Listen for browser coming back online to flush the queue
+  window.addEventListener('online', flushQueue)
+
+  // Start polling timer
   timer = setInterval(load, 5000)
 })
 
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
+  // Clean up event listeners if needed, though Vue handles most of it.
+  window.removeEventListener('online', flushQueue);
 })
 </script>
 
