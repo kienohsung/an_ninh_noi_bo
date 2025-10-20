@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import date, time, datetime
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
+# --- THAY ĐỔI: Import thêm IntervalTrigger ---
+from apscheduler.triggers.interval import IntervalTrigger
 
 from .config import settings
 from .database import Base, engine, SessionLocal
@@ -50,7 +51,7 @@ app.include_router(gemini_router)
 app.include_router(long_term_guests_router)
 app.include_router(vehicle_log_router)
 
-# --- Tác vụ nền cho khách dài hạn (giữ nguyên) ---
+# --- Tác vụ nền cho khách dài hạn (giữ nguyên logic) ---
 def create_daily_guest_entries():
     db: Session = SessionLocal()
     try:
@@ -74,7 +75,8 @@ def create_daily_guest_entries():
 
             if not already_exists:
                 tz = pytz.timezone(settings.TZ)
-                creation_time = tz.localize(datetime.combine(today, time(8, 0)))
+                # THAY ĐỔI NHỎ: Sử dụng thời gian hiện tại thay vì 8h sáng cố định
+                creation_time = datetime.now(tz)
                 new_guest = models.Guest(
                     full_name=lt_guest.full_name,
                     id_card_number=lt_guest.id_card_number,
@@ -99,7 +101,7 @@ def create_daily_guest_entries():
     finally:
         db.close()
 
-# --- Sự kiện khởi động ứng dụng (giữ nguyên) ---
+# --- Sự kiện khởi động ứng dụng ---
 @app.on_event("startup")
 def on_startup():
     setup_logging()
@@ -122,17 +124,18 @@ def on_startup():
     finally:
         db.close()
         
+    # --- CÀI ĐẶT SCHEDULER (ĐÃ CẬP NHẬT) ---
     try:
         scheduler = BackgroundScheduler(timezone=settings.TZ)
+        # --- THAY ĐỔI: Chạy tác vụ mỗi 30 phút ---
         scheduler.add_job(
             create_daily_guest_entries,
-            trigger=CronTrigger(hour=8, minute=0),
+            trigger=IntervalTrigger(minutes=30),
             id="create_daily_guests_job",
             name="Create daily guest entries from long-term registrations",
             replace_existing=True
         )
         scheduler.start()
-        logging.info(f"Scheduler for long-term guests started. Will run daily at 08:00 (Timezone: {settings.TZ}).")
+        logging.info(f"Scheduler for long-term guests started. Will run every 30 minutes (Timezone: {settings.TZ}).")
     except Exception as e:
         logging.error(f"Could not start the scheduler: {e}", exc_info=True)
-
