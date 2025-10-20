@@ -6,7 +6,8 @@ import os
 from .. import models, schemas
 from ..deps import get_db
 from ..auth import require_roles, get_current_user
-from ..utils.notifications import format_guest_for_telegram, send_telegram_message
+# Cập nhật import: chỉ dùng hàm chạy nền mới
+from ..utils.notifications import run_pending_list_notification
 from ..models import get_local_time
 
 router = APIRouter(prefix="/guests", tags=["guests-confirm"])
@@ -17,16 +18,14 @@ def confirm_in(guest_id: int, bg: BackgroundTasks, db: Session = Depends(get_db)
     if not guest:
         raise HTTPException(status_code=404, detail="Guest not found")
 
-    # Chỉ cập nhật nếu trạng thái chưa phải là 'checked_in'
     if guest.status != "checked_in":
         guest.status = "checked_in"
         guest.check_in_time = get_local_time()
         db.commit()
         db.refresh(guest)
     
-    # Luôn gửi thông báo văn bản khi xác nhận vào
-    caption = format_guest_for_telegram(guest, guest.registered_by.full_name if guest.registered_by else None)
-    bg.add_task(send_telegram_message, caption)
+    # Kích hoạt gửi lại danh sách tổng hợp sau khi xác nhận
+    bg.add_task(run_pending_list_notification)
     
     return schemas.GuestRead.model_validate(guest)
 

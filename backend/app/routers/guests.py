@@ -1,7 +1,7 @@
 # File: backend/app/routers/guests.py
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Response, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, func, distinct
+from sqlalchemy import or_, func
 from datetime import datetime
 import pandas as pd
 import io
@@ -16,13 +16,14 @@ from ..auth import get_current_user, require_roles
 from ..models import get_local_time
 from ..config import settings
 from ..database import unaccent_string
-from ..utils.notifications import format_guest_for_telegram, send_telegram_photos
+# Cập nhật import: chỉ dùng hàm chạy nền mới
+from ..utils.notifications import run_pending_list_notification
 
 router = APIRouter(prefix="/guests", tags=["guests"])
 logger = logging.getLogger(__name__)
 
 @router.post("/", response_model=schemas.GuestRead, dependencies=[Depends(require_roles("admin", "manager", "staff"))])
-def create_guest(payload: schemas.GuestCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+def create_guest(payload: schemas.GuestCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user), bg: BackgroundTasks = BackgroundTasks()):
     guest = models.Guest(
         full_name=payload.full_name,
         id_card_number=payload.id_card_number or "",
@@ -37,11 +38,13 @@ def create_guest(payload: schemas.GuestCreate, db: Session = Depends(get_db), us
     db.commit()
     db.refresh(guest)
     
-    # Thông báo sẽ được gửi khi ảnh được tải lên, không gửi ở đây
+    # Kích hoạt gửi danh sách tổng hợp
+    bg.add_task(run_pending_list_notification)
+
     return guest
 
 @router.post("/{guest_id}/upload-image", response_model=schemas.GuestImageRead, dependencies=[Depends(require_roles("admin", "manager", "staff"))])
-async def upload_guest_image(guest_id: int, file: UploadFile = File(...), db: Session = Depends(get_db), bg: BackgroundTasks = BackgroundTasks()):
+async def upload_guest_image(guest_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
     guest = db.query(models.Guest).get(guest_id)
     if not guest:
         raise HTTPException(status_code=404, detail="Guest not found")
@@ -63,33 +66,15 @@ async def upload_guest_image(guest_id: int, file: UploadFile = File(...), db: Se
         db.add(db_image)
         db.commit()
         db.refresh(db_image)
-
-        # Gửi thông báo sau khi tải ảnh lên
-        guest_with_details = db.query(models.Guest).options(
-            joinedload(models.Guest.images), 
-            joinedload(models.Guest.registered_by)
-        ).filter(models.Guest.id == guest_id).first()
-
-        if guest_with_details:
-            caption = format_guest_for_telegram(
-                guest_with_details, 
-                guest_with_details.registered_by.full_name if guest_with_details.registered_by else None
-            )
-            image_paths = []
-            for img in (guest_with_details.images or []):
-                full_path = os.path.join(settings.UPLOAD_DIR, img.image_path)
-                if os.path.exists(full_path):
-                    image_paths.append(full_path)
-            
-            bg.add_task(send_telegram_photos, caption, image_paths)
         
+        # Đã xóa logic gửi thông báo ở đây để tránh gửi tin nhắn riêng lẻ
         return db_image
     except Exception as e:
         logger.error(f"Could not upload image for guest {guest_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Could not upload image")
 
 @router.post("/bulk", response_model=list[schemas.GuestRead], dependencies=[Depends(require_roles("admin", "manager", "staff"))])
-def create_guests_bulk(payload: schemas.GuestBulkCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+def create_guests_bulk(payload: schemas.GuestBulkCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user), bg: BackgroundTasks = BackgroundTasks()):
     new_guests = []
     for individual in payload.guests:
         if not individual.full_name:
@@ -113,11 +98,14 @@ def create_guests_bulk(payload: schemas.GuestBulkCreate, db: Session = Depends(g
     db.commit()
     for guest in new_guests:
         db.refresh(guest)
-        # Thông báo sẽ được gửi khi ảnh được tải lên, không gửi ở đây
+        
+    # Kích hoạt gửi danh sách tổng hợp (chỉ 1 lần sau khi thêm cả đoàn)
+    bg.add_task(run_pending_list_notification)
         
     return new_guests
 
 
+# ... (Các hàm còn lại không thay đổi) ...
 @router.get("/", response_model=list[schemas.GuestReadWithUser])
 def list_guests(
     db: Session = Depends(get_db),

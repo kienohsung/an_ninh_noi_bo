@@ -1,9 +1,15 @@
 # File: backend/app/utils/notifications.py
+# Purpose: Telegram notifications (text + photos) with safe fallbacks
 from __future__ import annotations
 import os
 import requests
-from typing import Iterable, Optional
-import pytz
+from typing import List
+from sqlalchemy.orm import Session
+
+# SỬA LỖI: Thay đổi đường dẫn import từ "." thành ".." để trỏ ra thư mục app
+from ..database import SessionLocal
+from .. import models
+from ..models import get_local_time
 
 TELEGRAM_ENABLED = os.getenv("NOTIFY_TELEGRAM_ENABLED", "false").lower() == "true"
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -15,97 +21,61 @@ def _bot_api(method: str) -> str:
 def can_send() -> bool:
     return TELEGRAM_ENABLED and bool(TELEGRAM_BOT_TOKEN) and bool(TELEGRAM_CHAT_ID)
 
-def format_guest_for_telegram(guest, registered_by_name: str | None = None) -> str:
-    """Formats guest details into a caption for Telegram, with Vietnamese status."""
-    status_map = {
-        "pending": "⏳ ĐANG CHỜ",
-        "checked_in": "✅ ĐÃ VÀO",
-        "checked_out": "🚪 ĐÃ RA"
-    }
-    status_vietnamese = status_map.get(guest.status, guest.status)
-
-    title = "👤 Khách Mới Đăng Ký" if guest.status == 'pending' else "➡️ Xác Nhận Khách Vào"
-
-    lines = [
-        title,
-        "--------------------------",
-        f"Tên: {guest.full_name}",
-        f"CCCD: {guest.id_card_number or 'N/A'}",
-        f"NCC: {guest.supplier_name or 'N/A'}",
-        f"Biển số: {guest.license_plate or 'N/A'}",
-        f"Lý do: {guest.reason or 'N/A'}",
-        f"Trạng thái: {status_vietnamese}",
-    ]
-    if registered_by_name:
-        lines.append(f"Đăng ký bởi: {registered_by_name}")
-
-    tz = pytz.timezone(os.getenv("TZ", "Asia/Bangkok"))
-    
-    if guest.created_at:
-        created_local = guest.created_at.astimezone(tz)
-        lines.append(f"Tạo lúc: {created_local.strftime('%H:%M %d/%m/%Y')}")
-
-    if guest.check_in_time:
-        check_in_local = guest.check_in_time.astimezone(tz)
-        lines.append(f"Vào lúc: {check_in_local.strftime('%H:%M %d/%m/%Y')}")
-        
-    return "\n".join(lines)
-
-
 def send_telegram_message(text: str) -> dict:
-    """Send a plain text message. Returns response JSON or a stub if disabled."""
+    """Gửi một tin nhắn văn bản. Trả về JSON phản hồi hoặc một stub nếu bị vô hiệu hóa."""
     if not can_send():
         return {"ok": False, "skipped": True, "reason": "TELEGRAM_DISABLED_OR_MISSING_ENV"}
     try:
         resp = requests.post(_bot_api("sendMessage"), json={
             "chat_id": TELEGRAM_CHAT_ID,
-            "text": text
+            "text": text,
+            "parse_mode": "HTML" # Cho phép dùng thẻ HTML cơ bản
         }, timeout=10)
         return resp.json()
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
-def send_telegram_photos(caption: str, file_paths: Iterable[str]) -> dict:
-    """Send multiple photos (up to Telegram limits). If no files provided, fallback to text."""
-    files = list(file_paths or [])
-    if not files:
-        return send_telegram_message(caption)
-    if not can_send():
-        return {"ok": False, "skipped": True, "reason": "TELEGRAM_DISABLED_OR_MISSING_ENV"}
+def format_pending_list_for_telegram(pending_guests: List[models.Guest]) -> str:
+    """Định dạng danh sách khách đang chờ thành một tin nhắn Telegram duy nhất."""
+    now = get_local_time().strftime('%H:%M %d/%m/%Y')
     
-    media = []
-    form = {}
-    for idx, fp in enumerate(files):
-        field = f"photo{idx}"
-        media.append({
-            "type": "photo",
-            "media": f"attach://{field}"
-        })
-        try:
-            form[field] = open(fp, "rb")
-        except Exception:
-            pass # If file missing, skip it gracefully
+    if not pending_guests:
+        return f"✅ <b>Tất cả khách đã được xác nhận vào.</b>\n<i>(Cập nhật lúc {now})</i>"
+
+    header = f"📢 <b>DANH SÁCH KHÁCH CHỜ VÀO ({len(pending_guests)} người)</b>\n<i>(Cập nhật lúc {now})</i>"
     
-    if not media:
-        return send_telegram_message(caption)
+    lines = [header]
+    for i, guest in enumerate(pending_guests, 1):
+        # Escape các ký tự HTML đặc biệt trong tên và thông tin để tránh lỗi parse_mode
+        full_name = guest.full_name.replace('<', '&lt;').replace('>', '&gt;').replace('&', '&amp;')
+        id_card = (guest.id_card_number or 'N/A').replace('<', '&lt;').replace('>', '&gt;').replace('&', '&amp;')
+        supplier_name = (guest.supplier_name or 'N/A').replace('<', '&lt;').replace('>', '&gt;').replace('&', '&amp;')
+        license_plate = (guest.license_plate or 'N/A').replace('<', '&lt;').replace('>', '&gt;').replace('&', '&amp;')
+
+        lines.append("--------------------")
+        lines.append(f"{i} - <b>{full_name}</b> - {id_card}")
+        lines.append(f"BKS: {license_plate} - {supplier_name}")
+    
+    lines.append("--------------------")
         
+    message = "\n".join(lines)
+    
+    # Giới hạn ký tự của Telegram là 4096. Cắt bớt nếu cần thiết.
+    if len(message) > 4096:
+        message = message[:4090] + "\n..."
+        
+    return message
+
+def run_pending_list_notification():
+    """
+    Hàm chạy nền: Lấy toàn bộ khách đang chờ và gửi một thông báo tổng hợp.
+    Hàm này tự tạo DB session riêng để đảm bảo an toàn trong môi trường đa luồng.
+    """
+    db: Session = SessionLocal()
     try:
-        data = {"chat_id": TELEGRAM_CHAT_ID}
-        
-        # Telegram allows caption only on first media item in a group
-        media[0]["caption"] = caption
-        data["media"] = str(media).replace("'", '"')
-        
-        resp = requests.post(_bot_api("sendMediaGroup"), data=data, files=form, timeout=20)
-        
-        return resp.json()
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+        pending_guests = db.query(models.Guest).filter(models.Guest.status == 'pending').order_by(models.Guest.created_at.asc()).all()
+        message = format_pending_list_for_telegram(pending_guests)
+        send_telegram_message(message)
     finally:
-        # Ensure all file handles are closed
-        for f in form.values():
-            try:
-                f.close()
-            except Exception:
-                pass
+        db.close()
 
