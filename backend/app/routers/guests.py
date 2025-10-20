@@ -1,5 +1,5 @@
-# File: security_mgmt_dev/backend/app/routers/guests.py
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Response
+# File: backend/app/routers/guests.py
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Response, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func, distinct
 from datetime import datetime
@@ -15,8 +15,8 @@ from ..deps import get_db
 from ..auth import get_current_user, require_roles
 from ..models import get_local_time
 from ..config import settings
-from ..database import unaccent_string # <-- Import hàm unaccent
-
+from ..database import unaccent_string
+from ..utils.notifications import format_guest_for_telegram, send_telegram_photos
 
 router = APIRouter(prefix="/guests", tags=["guests"])
 logger = logging.getLogger(__name__)
@@ -36,10 +36,12 @@ def create_guest(payload: schemas.GuestCreate, db: Session = Depends(get_db), us
     db.add(guest)
     db.commit()
     db.refresh(guest)
+    
+    # Thông báo sẽ được gửi khi ảnh được tải lên, không gửi ở đây
     return guest
 
 @router.post("/{guest_id}/upload-image", response_model=schemas.GuestImageRead, dependencies=[Depends(require_roles("admin", "manager", "staff"))])
-async def upload_guest_image(guest_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_guest_image(guest_id: int, file: UploadFile = File(...), db: Session = Depends(get_db), bg: BackgroundTasks = BackgroundTasks()):
     guest = db.query(models.Guest).get(guest_id)
     if not guest:
         raise HTTPException(status_code=404, detail="Guest not found")
@@ -61,6 +63,25 @@ async def upload_guest_image(guest_id: int, file: UploadFile = File(...), db: Se
         db.add(db_image)
         db.commit()
         db.refresh(db_image)
+
+        # Gửi thông báo sau khi tải ảnh lên
+        guest_with_details = db.query(models.Guest).options(
+            joinedload(models.Guest.images), 
+            joinedload(models.Guest.registered_by)
+        ).filter(models.Guest.id == guest_id).first()
+
+        if guest_with_details:
+            caption = format_guest_for_telegram(
+                guest_with_details, 
+                guest_with_details.registered_by.full_name if guest_with_details.registered_by else None
+            )
+            image_paths = []
+            for img in (guest_with_details.images or []):
+                full_path = os.path.join(settings.UPLOAD_DIR, img.image_path)
+                if os.path.exists(full_path):
+                    image_paths.append(full_path)
+            
+            bg.add_task(send_telegram_photos, caption, image_paths)
         
         return db_image
     except Exception as e:
@@ -92,6 +113,8 @@ def create_guests_bulk(payload: schemas.GuestBulkCreate, db: Session = Depends(g
     db.commit()
     for guest in new_guests:
         db.refresh(guest)
+        # Thông báo sẽ được gửi khi ảnh được tải lên, không gửi ở đây
+        
     return new_guests
 
 
@@ -115,11 +138,9 @@ def list_guests(
             query = query.filter(models.Guest.status == "pending")
 
     if q:
-        # Xử lý từ khóa tìm kiếm: loại bỏ dấu và thêm ký tự wildcard
         unaccented_q = unaccent_string(q)
         like = f"%{unaccented_q}%"
         
-        # Áp dụng tìm kiếm không dấu và không phân biệt hoa/thường
         query = query.filter(or_(
             func.unaccent(models.Guest.full_name).ilike(like),
             models.Guest.id_card_number.ilike(like),
@@ -128,7 +149,7 @@ def list_guests(
             models.Guest.license_plate.ilike(like),
             func.unaccent(models.Guest.supplier_name).ilike(like),
             func.unaccent(models.User.full_name).ilike(like),
-            models.Guest.status.ilike(f"%{q}%") # Trạng thái không cần unaccent
+            models.Guest.status.ilike(f"%{q}%")
         ))
     
     results = query.order_by(models.Guest.created_at.desc()).all()

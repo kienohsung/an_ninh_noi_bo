@@ -43,3 +43,4 @@ backend/security_v2_3.db
 frontend/node_modules/
 backend/credentials.json
 doc/Telegram_info.md
+/backend/uploads/guests
