@@ -16,14 +16,22 @@ from ..auth import get_current_user, require_roles
 from ..models import get_local_time
 from ..config import settings
 from ..database import unaccent_string
-# Cập nhật import: chỉ dùng hàm chạy nền mới
+# Cập nhật import: chỉ dùng hàm chạy nền mới và hàm định dạng biển số
 from ..utils.notifications import run_pending_list_notification
+from ..utils.plate_formatter import format_license_plate
 
 router = APIRouter(prefix="/guests", tags=["guests"])
 logger = logging.getLogger(__name__)
 
 @router.post("/", response_model=schemas.GuestRead, dependencies=[Depends(require_roles("admin", "manager", "staff"))])
 def create_guest(payload: schemas.GuestCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user), bg: BackgroundTasks = BackgroundTasks()):
+    """
+    Tạo một bản ghi khách lẻ mới.
+    """
+    # Chuẩn hóa biển số ngay khi nhận được yêu cầu
+    if payload.license_plate:
+        payload.license_plate = format_license_plate(payload.license_plate)
+
     guest = models.Guest(
         full_name=payload.full_name,
         id_card_number=payload.id_card_number or "",
@@ -67,7 +75,6 @@ async def upload_guest_image(guest_id: int, file: UploadFile = File(...), db: Se
         db.commit()
         db.refresh(db_image)
         
-        # Đã xóa logic gửi thông báo ở đây để tránh gửi tin nhắn riêng lẻ
         return db_image
     except Exception as e:
         logger.error(f"Could not upload image for guest {guest_id}: {e}", exc_info=True)
@@ -76,6 +83,10 @@ async def upload_guest_image(guest_id: int, file: UploadFile = File(...), db: Se
 @router.post("/bulk", response_model=list[schemas.GuestRead], dependencies=[Depends(require_roles("admin", "manager", "staff"))])
 def create_guests_bulk(payload: schemas.GuestBulkCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user), bg: BackgroundTasks = BackgroundTasks()):
     new_guests = []
+    
+    # Chuẩn hóa biển số cho cả đoàn
+    formatted_plate = format_license_plate(payload.license_plate) if payload.license_plate else ""
+
     for individual in payload.guests:
         if not individual.full_name:
             continue
@@ -84,7 +95,7 @@ def create_guests_bulk(payload: schemas.GuestBulkCreate, db: Session = Depends(g
             id_card_number=individual.id_card_number or "",
             company=payload.company or "",
             reason=payload.reason or "",
-            license_plate=payload.license_plate or "",
+            license_plate=formatted_plate,
             supplier_name=payload.supplier_name or "",
             status="pending",
             registered_by_user_id=user.id
@@ -104,8 +115,6 @@ def create_guests_bulk(payload: schemas.GuestBulkCreate, db: Session = Depends(g
         
     return new_guests
 
-
-# ... (Các hàm còn lại không thay đổi) ...
 @router.get("/", response_model=list[schemas.GuestReadWithUser])
 def list_guests(
     db: Session = Depends(get_db),
@@ -151,7 +160,6 @@ def list_guests(
         
     return output
 
-
 @router.get("/suggestions", response_model=schemas.GuestSuggestions)
 def get_suggestions(db: Session = Depends(get_db)):
     license_plates = db.query(models.Guest.license_plate).filter(models.Guest.license_plate != "").distinct().all()
@@ -170,7 +178,12 @@ def update_guest(guest_id: int, payload: schemas.GuestUpdate, db: Session = Depe
     if user.role == "staff" and guest.registered_by_user_id != user.id:
         raise HTTPException(status_code=403, detail="Not allowed")
     
-    update_data = payload.dict(exclude_unset=True)
+    update_data = payload.model_dump(exclude_unset=True)
+    
+    # Chuẩn hóa biển số khi cập nhật
+    if 'license_plate' in update_data and update_data['license_plate']:
+        update_data['license_plate'] = format_license_plate(update_data['license_plate'])
+
     for field, value in update_data.items():
         setattr(guest, field, value)
         
@@ -238,22 +251,6 @@ def delete_guest_image(image_id: int, db: Session = Depends(get_db), user: model
     logger.info(f"Successfully deleted image {image_id}.")
     return {"ok": True}
 
-
-@router.post("/{guest_id}/confirm_checkin", response_model=schemas.GuestReadWithUser, dependencies=[Depends(require_roles("admin", "guard"))])
-def confirm_checkin(guest_id: int, db: Session = Depends(get_db)):
-    guest = db.query(models.Guest).get(guest_id)
-    if not guest:
-        raise HTTPException(status_code=404, detail="Guest not found")
-    guest.status = "checked_in"
-    guest.check_in_time = guest.check_in_time or get_local_time()
-    db.commit(); db.refresh(guest)
-    
-    result_data = schemas.GuestRead.model_validate(guest).model_dump()
-    result_data["registered_by_name"] = guest.registered_by.full_name if guest.registered_by else ""
-    result_data["images"] = [schemas.GuestImageRead.model_validate(img) for img in guest.images]
-
-    return schemas.GuestReadWithUser.model_validate(result_data)
-
 @router.post("/import/xlsx", dependencies=[Depends(require_roles("admin", "manager"))])
 def import_guests(file: UploadFile = File(...), db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     try:
@@ -287,13 +284,15 @@ def import_guests(file: UploadFile = File(...), db: Session = Depends(get_db), u
             else:
                  logger.warning(f"Username '{registered_by_username}' not found. Assigning guest '{row.get('Họ tên')}' to current user '{user.username}'.")
 
+            license_plate_raw = row.get("Biển số", "")
+            
             guest = models.Guest(
                 full_name=row.get("Họ tên", ""),
                 id_card_number=str(row.get("CCCD", "")),
                 supplier_name=row.get("Nhà cung cấp", row.get("Công ty", "")),
                 company=row.get("Công ty", ""),
                 reason=row.get("Lý do", ""),
-                license_plate=row.get("Biển số", ""),
+                license_plate=format_license_plate(license_plate_raw) if license_plate_raw else "",
                 status=status,
                 check_in_time=check_in_time,
                 registered_by_user_id=registered_by_user_id
@@ -319,7 +318,6 @@ def import_guests(file: UploadFile = File(...), db: Session = Depends(get_db), u
                         guest.images.append(image_record)
                     else:
                         logger.warning(f"Image path '{path}' listed in import file but file not found.")
-
 
             db.add(guest)
         db.commit()
@@ -372,7 +370,6 @@ def export_guests(db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Could not generate Excel file: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Could not generate Excel file.")
-
 
 @router.post("/clear", dependencies=[Depends(require_roles("admin"))])
 def clear_guests(db: Session = Depends(get_db)):

@@ -113,6 +113,66 @@ Fetch lazy theo filter; cache kết quả gần nhất
 
 Giới hạn điểm biểu đồ (downsample) nếu quá dày
 
+# 21.10.2025
+## Cải tiến: Chuẩn hóa biển số xe
+            # 📝 Tổng kết Cải tiến: Chuẩn hóa Biển số xe
+
+        Dự án đã thực hiện **hai cải tiến quan trọng** nhằm giải quyết vấn đề dữ liệu biển số xe không nhất quán. Mục tiêu là đảm bảo mọi biển số trong hệ thống đều tuân theo một **định dạng chuẩn duy nhất** ($*$-XXX.XX), giúp dữ liệu sạch sẽ, đồng bộ và dễ dàng cho việc truy vấn sau này.
+
+        ---
+### 1. Công cụ Chuẩn hóa Dữ liệu Hiện có (Batch Processing) ⚙️
+
+### Mục đích
+Xử lý và định dạng lại **toàn bộ dữ liệu biển số đã tồn tại** trong cơ sở dữ liệu, vốn được nhập vào trước khi có quy tắc chuẩn hóa.
+
+### Giải pháp
+* Tạo một **script Python độc lập** có tên `standardize_plates.py` và đặt trong thư mục `tools/`.
+* Script này kết nối trực tiếp đến file cơ sở dữ liệu `$security\_v2\_3.db$`.
+* Nó đọc tất cả các bản ghi trong các bảng có chứa thông tin biển số (`guests`, `long\_term\_guests`, `vehicle\_log`).
+* Áp dụng logic định dạng để sửa các biển số chưa đúng chuẩn.
+* Cập nhật lại các bản ghi đã sửa vào cơ sở dữ liệu.
+
+### Ưu điểm
+* Giải quyết **triệt để vấn đề dữ liệu cũ** chỉ với một lần chạy.
+* Hoạt động độc lập, **không ảnh hưởng** đến hoạt động của ứng dụng chính.
+
+### Trạng thái
+✅ **Đã hoàn thành và hoạt động tốt.**
+
+---
+
+### 2. Tích hợp Chuẩn hóa Tự động vào Backend (Real-time Processing) 🚀
+
+### Mục đích
+Đảm bảo mọi dữ liệu biển số **mới** được nhập vào hệ thống (từ giao diện người dùng) sẽ được **tự động chuẩn hóa** ngay tại thời điểm tạo hoặc cập nhật.
+
+### Giải pháp
+
+#### Tạo Module Tiện ích:
+* Tạo file `backend/app/utils/plate_formatter.py`.
+* File này chứa hàm `format_license_plate()`, đóng gói logic chuẩn hóa biển số để có thể **tái sử dụng** ở nhiều nơi.
+
+#### Tích hợp vào API Router:
+Trong file `backend/app/routers/guests.py`, hàm `format_license_plate()` được gọi trong các API endpoint sau:
+* `create_guest()`: Khi nhân viên đăng ký một khách lẻ mới.
+* `create_guests_bulk()`: Khi đăng ký khách theo đoàn.
+* `update_guest()`: Khi cập nhật thông tin của một khách đã có.
+* `import_guests()`: Khi nhập dữ liệu hàng loạt từ file Excel.
+
+### Ưu điểm
+* **Tự động hóa hoàn toàn** quy trình.
+* **Ngăn chặn dữ liệu không hợp lệ** được ghi vào cơ sở dữ liệu ngay từ đầu.
+* Đảm bảo tính **nhất quán** của dữ liệu về lâu dài.
+
+### Trạng thái
+✅ **Đã hoàn thành và tích hợp thành công vào hệ thống.**
+
+---
+
+### Kết luận 🎉
+
+Sự kết hợp của hai tính năng trên đã giải quyết **toàn diện** bài toán về dữ liệu biển số. Công cụ xử lý hàng loạt đã "**dọn dẹp**" quá khứ, trong khi việc tích hợp vào backend đảm bảo một "**tương lai**" dữ liệu sạch và nhất quán.
+
 # 17.10.2025
 ## Thiết kế lại trang phân tích xe ra vào 
 
