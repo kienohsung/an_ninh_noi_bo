@@ -11,10 +11,12 @@ from sqlalchemy.orm import Session
 from ..database import SessionLocal
 from .. import models
 from ..models import get_local_time
+from ..config import settings
 
-TELEGRAM_ENABLED = os.getenv("NOTIFY_TELEGRAM_ENABLED", "false").lower() == "true"
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+# Dữ liệu đã được nạp từ .env vào settings trong main.py
+TELEGRAM_ENABLED = settings.NOTIFY_TELEGRAM_ENABLED
+TELEGRAM_BOT_TOKEN = settings.TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID = settings.TELEGRAM_CHAT_ID
 
 # --- CẢI TIẾN: Lưu trữ ID tin nhắn cuối cùng ---
 # Lưu file ID trong thư mục backend, bên ngoài thư mục app

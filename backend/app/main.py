@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from .routers.admin_telegram import router as admin_telegram_router
 
 # Nạp .env SỚM (main.py ở backend/app/, .env ở backend/.env)
 try:
@@ -34,6 +35,7 @@ from .routers.reports import router as reports_router
 from .routers.gemini import router as gemini_router
 from .routers.long_term_guests import router as long_term_guests_router
 from .routers.vehicle_log import router as vehicle_log_router
+from .routers.guests_confirm import router as guests_confirm_router # <-- ĐÃ THÊM
 
 app = FastAPI(
     title="Ứng dụng an ninh nội bộ - Local Security App",
@@ -61,6 +63,8 @@ app.include_router(reports_router)
 app.include_router(gemini_router)
 app.include_router(long_term_guests_router)
 app.include_router(vehicle_log_router)
+app.include_router(guests_confirm_router) # <-- ĐÃ THÊM VÀO ỨNG DỤNG
+app.include_router(admin_telegram_router)
 
 
 # =========================================================
