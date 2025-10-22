@@ -19,6 +19,10 @@ from ..database import unaccent_string
 # Cập nhật import: chỉ dùng hàm chạy nền mới và hàm định dạng biển số
 from ..utils.notifications import run_pending_list_notification
 from ..utils.plate_formatter import format_license_plate
+# --- BẮT ĐẦU THAY ĐỔI ---
+# Thêm import cho module tiện ích mới
+from ..utils.name_formatter import format_full_name
+# --- KẾT THÚC THAY ĐỔI ---
 
 router = APIRouter(prefix="/guests", tags=["guests"])
 logger = logging.getLogger(__name__)
@@ -28,9 +32,15 @@ def create_guest(payload: schemas.GuestCreate, db: Session = Depends(get_db), us
     """
     Tạo một bản ghi khách lẻ mới.
     """
-    # Chuẩn hóa biển số ngay khi nhận được yêu cầu
+    # Chuẩn hóa biển số
     if payload.license_plate:
         payload.license_plate = format_license_plate(payload.license_plate)
+        
+    # --- BẮT ĐẦU THAY ĐỔI ---
+    # Chuẩn hóa họ tên
+    if payload.full_name:
+        payload.full_name = format_full_name(payload.full_name)
+    # --- KẾT THÚC THAY ĐỔI ---
 
     guest = models.Guest(
         full_name=payload.full_name,
@@ -51,6 +61,7 @@ def create_guest(payload: schemas.GuestCreate, db: Session = Depends(get_db), us
 
     return guest
 
+# ... (Giữ nguyên các hàm upload_guest_image) ...
 @router.post("/{guest_id}/upload-image", response_model=schemas.GuestImageRead, dependencies=[Depends(require_roles("admin", "manager", "staff"))])
 async def upload_guest_image(guest_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
     guest = db.query(models.Guest).get(guest_id)
@@ -80,6 +91,7 @@ async def upload_guest_image(guest_id: int, file: UploadFile = File(...), db: Se
         logger.error(f"Could not upload image for guest {guest_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Could not upload image")
 
+
 @router.post("/bulk", response_model=list[schemas.GuestRead], dependencies=[Depends(require_roles("admin", "manager", "staff"))])
 def create_guests_bulk(payload: schemas.GuestBulkCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user), bg: BackgroundTasks = BackgroundTasks()):
     new_guests = []
@@ -90,8 +102,14 @@ def create_guests_bulk(payload: schemas.GuestBulkCreate, db: Session = Depends(g
     for individual in payload.guests:
         if not individual.full_name:
             continue
+            
+        # --- BẮT ĐẦU THAY ĐỔI ---
+        # Chuẩn hóa họ tên cho từng người trong đoàn
+        formatted_name = format_full_name(individual.full_name)
+        # --- KẾT THÚC THAY ĐỔI ---
+        
         guest = models.Guest(
-            full_name=individual.full_name,
+            full_name=formatted_name, # <-- Sử dụng tên đã chuẩn hóa
             id_card_number=individual.id_card_number or "",
             company=payload.company or "",
             reason=payload.reason or "",
@@ -115,6 +133,7 @@ def create_guests_bulk(payload: schemas.GuestBulkCreate, db: Session = Depends(g
         
     return new_guests
 
+# ... (Giữ nguyên các hàm list_guests và get_suggestions) ...
 @router.get("/", response_model=list[schemas.GuestReadWithUser])
 def list_guests(
     db: Session = Depends(get_db),
@@ -183,6 +202,12 @@ def update_guest(guest_id: int, payload: schemas.GuestUpdate, db: Session = Depe
     # Chuẩn hóa biển số khi cập nhật
     if 'license_plate' in update_data and update_data['license_plate']:
         update_data['license_plate'] = format_license_plate(update_data['license_plate'])
+        
+    # --- BẮT ĐẦU THAY ĐỔI ---
+    # Chuẩn hóa họ tên khi cập nhật
+    if 'full_name' in update_data and update_data['full_name']:
+        update_data['full_name'] = format_full_name(update_data['full_name'])
+    # --- KẾT THÚC THAY ĐỔI ---
 
     for field, value in update_data.items():
         setattr(guest, field, value)
@@ -191,6 +216,7 @@ def update_guest(guest_id: int, payload: schemas.GuestUpdate, db: Session = Depe
     db.refresh(guest)
     return guest
 
+# ... (Giữ nguyên các hàm _archive_image, delete_guest, delete_guest_image) ...
 def _archive_image(image_path: str):
     try:
         archive_dir = os.path.join(settings.UPLOAD_DIR, "archived_guests")
@@ -251,6 +277,7 @@ def delete_guest_image(image_id: int, db: Session = Depends(get_db), user: model
     logger.info(f"Successfully deleted image {image_id}.")
     return {"ok": True}
 
+
 @router.post("/import/xlsx", dependencies=[Depends(require_roles("admin", "manager"))])
 def import_guests(file: UploadFile = File(...), db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     try:
@@ -263,6 +290,7 @@ def import_guests(file: UploadFile = File(...), db: Session = Depends(get_db), u
             if not row.get("Họ tên"):
                 continue
 
+            # ... (Giữ nguyên logic xử lý status, check_in_time, registered_by_user_id) ...
             status_str = str(row.get("Trạng thái", "")).strip()
             status = "checked_in" if status_str == "ĐÃ VÀO" else "pending"
 
@@ -286,8 +314,13 @@ def import_guests(file: UploadFile = File(...), db: Session = Depends(get_db), u
 
             license_plate_raw = row.get("Biển số", "")
             
+            # --- BẮT ĐẦU THAY ĐỔI ---
+            # Chuẩn hóa họ tên khi import
+            full_name_raw = row.get("Họ tên", "")
+            # --- KẾT THÚC THAY ĐỔI ---
+            
             guest = models.Guest(
-                full_name=row.get("Họ tên", ""),
+                full_name=format_full_name(full_name_raw), # <-- Sử dụng tên đã chuẩn hóa
                 id_card_number=str(row.get("CCCD", "")),
                 supplier_name=row.get("Nhà cung cấp", row.get("Công ty", "")),
                 company=row.get("Công ty", ""),
@@ -298,6 +331,7 @@ def import_guests(file: UploadFile = File(...), db: Session = Depends(get_db), u
                 registered_by_user_id=registered_by_user_id
             )
 
+            # ... (Giữ nguyên logic xử lý hình ảnh) ...
             image_paths_str = row.get("Hình ảnh", "")
             if image_paths_str and isinstance(image_paths_str, str):
                 image_paths = [path.strip() for path in image_paths_str.split(',') if path.strip()]
@@ -327,6 +361,7 @@ def import_guests(file: UploadFile = File(...), db: Session = Depends(get_db), u
         logger.error(f"File processing failed: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=f"File processing failed: {e}")
 
+# ... (Giữ nguyên các hàm export_guests và clear_guests) ...
 @router.get("/export/xlsx", dependencies=[Depends(require_roles("admin", "manager"))])
 def export_guests(db: Session = Depends(get_db)):
     try:
