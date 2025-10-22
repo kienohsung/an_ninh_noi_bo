@@ -1,7 +1,6 @@
 
 ## ✅ Tổng kết Lỗi và Cách Khắc phục Tính năng Telegram
 
-
 Quá trình gỡ lỗi tính năng gửi tin nhắn Telegram đã trải qua ba giai đoạn chính để đi đến thành công:
 
 ---
@@ -38,8 +37,3 @@ Quá trình gỡ lỗi tính năng gửi tin nhắn Telegram đã trải qua ba 
 
 * **Phản hồi:** `{"ok": true, ... "text": "🔔 Test: hệ thống đã kết nối Telegram thành công."}`
 * **Thành công:** **Tính năng thông báo Telegram đã hoạt động ổn định** với Chat ID mới (`-1003121251250`) và Bot (`@ohsungPush_bot`) đã có đủ quyền cần thiết để gửi và cập nhật danh sách khách chờ.
-
-
-
-
-# test roolback
