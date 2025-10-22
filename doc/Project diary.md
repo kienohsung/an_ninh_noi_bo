@@ -113,6 +113,59 @@ Fetch lazy theo filter; cache kết quả gần nhất
 
 Giới hạn điểm biểu đồ (downsample) nếu quá dày
 
+
+
+
+
+# 22.10.2025
+# 🛰️ Tổng Kết Tính Năng: Lưu Trữ Lịch Sử Thông Báo Telegram
+
+**Mục tiêu:** Cải tiến hệ thống thông báo Telegram để duy trì lịch sử tất cả các phiên bản của danh sách khách chờ, đồng thời giữ cho kênh thông báo chính luôn gọn gàng bằng cách chỉ hiển thị trạng thái mới nhất.
+
+## 1. Mô tả & Lợi ích
+
+Tính năng này mở rộng quy trình **"Xóa & Thay thế"** bằng cách thêm một bước **Chuyển tiếp (Forward)** tin nhắn. Mỗi khi danh sách khách chờ được cập nhật, tin nhắn cũ (tin tổng hợp chứa danh sách khách của lần trước) sẽ được tự động chuyển đến một kênh lưu trữ chuyên biệt trước khi bị xóa khỏi kênh chính.
+
+| Tính năng | Kênh Chính (`TELEGRAM_CHAT_ID`) | Kênh Lưu Trữ (`TELEGRAM_ARCHIVE_CHAT_ID`) |
+| :--- | :--- | :--- |
+| **Hành vi** | Luôn hiển thị **1 tin nhắn duy nhất** (danh sách chờ hiện tại). | Lưu trữ **tất cả các tin nhắn cũ** (lịch sử cập nhật). |
+| **Mục đích** | Phản ứng và ra quyết định **tức thời**. | Kiểm tra **lịch sử** và **truy vết** dữ liệu. |
+
+## 2. Luồng Hoạt động Kỹ thuật
+
+Toàn bộ logic được thực hiện trong hàm chạy nền `run_pending_list_notification` tại `backend/app/utils/notifications.py`.
+
+| Bước | Hành động | Công nghệ sử dụng |
+| :--- | :--- | :--- |
+| **1. Kích hoạt** | Một khách mới được đăng ký (`/guests`) hoặc một khách được xác nhận vào (`/guests/{id}/confirm-in`). | `FastAPI BackgroundTasks`. |
+| **2. Đọc ID cũ** | Đọc ID của tin nhắn đang hiển thị trên kênh chính từ file `telegram_last_message_id.txt`. | Hàm `_read_last_message_id`. |
+| **3. LƯU TRỮ (MỚI)** | **Chuyển tiếp** tin nhắn cũ sang kênh lưu trữ. | `forward_telegram_message` (sử dụng Telegram API `forwardMessage`). |
+| **4. Xóa cũ** | Gửi yêu cầu xóa tin nhắn đó khỏi kênh chính. | `delete_telegram_message` (sử dụng Telegram API `deleteMessage`). |
+| **5. Gửi mới** | Tổng hợp dữ liệu khách `pending` hiện tại và gửi tin nhắn tổng hợp mới. | `send_telegram_message`. |
+| **6. Lưu ID mới** | Ghi đè ID của tin nhắn mới gửi vào file `telegram_last_message_id.txt`. | Hàm `_save_last_message_id`. |
+
+## 3. Cấu hình Bắt buộc
+
+Để kích hoạt tính năng lưu trữ, cần bổ sung biến môi trường sau trong file `.env` (nằm trong thư mục `backend/`):
+
+| Biến cấu hình | Mô tả | Giá trị Ví dụ |
+| :--- | :--- | :--- |
+| `TELEGRAM_ARCHIVE_CHAT_ID` | **ID Chat hoặc Kênh mà Bot sẽ chuyển tiếp tin nhắn cũ đến để lưu trữ.** | `-4884291349` (ID của nhóm lưu trữ mới). |
+
+## 4. Yêu cầu về Quyền Bot
+
+Bot Telegram của bạn phải có các quyền sau:
+
+1.  **Trong Kênh Thông Báo Chính (`TELEGRAM_CHAT_ID`):**
+    * Phải là **Quản trị viên (Administrator)**.
+    * Cần quyền **"Xóa tin nhắn" (Can delete messages)**.
+2.  **Trong Kênh Lưu Trữ (`TELEGRAM_ARCHIVE_CHAT_ID`):**
+    * Phải là **Quản trị viên (Administrator)**.
+    * Cần quyền **"Gửi tin nhắn" (Can post messages)** (để có thể thực hiện `forwardMessage`).
+
+---
+
+
 # 21.10.2025# 📝 Tổng kết Cải tiến: Chuẩn hóa Biển số xe
 Dự án đã thực hiện **hai cải tiến quan trọng** nhằm giải quyết vấn đề dữ liệu biển số xe không nhất quán. Mục tiêu là đảm bảo mọi biển số trong hệ thống đều tuân theo một **định dạng chuẩn duy nhất** ($*$-XXX.XX), giúp dữ liệu sạch sẽ, đồng bộ và dễ dàng cho việc truy vấn sau này.
 ---
