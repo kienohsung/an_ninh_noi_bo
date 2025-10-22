@@ -17,6 +17,8 @@ from ..config import settings
 TELEGRAM_ENABLED = settings.NOTIFY_TELEGRAM_ENABLED
 TELEGRAM_BOT_TOKEN = settings.TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID = settings.TELEGRAM_CHAT_ID
+# --- CẢI TIẾN: Nạp chat ID lưu trữ ---
+TELEGRAM_ARCHIVE_CHAT_ID = settings.TELEGRAM_ARCHIVE_CHAT_ID
 
 # --- CẢI TIẾN: Lưu trữ ID tin nhắn cuối cùng ---
 # Lưu file ID trong thư mục backend, bên ngoài thư mục app
@@ -29,7 +31,7 @@ def _bot_api(method: str) -> str:
 def can_send() -> bool:
     return TELEGRAM_ENABLED and bool(TELEGRAM_BOT_TOKEN) and bool(TELEGRAM_CHAT_ID)
 
-# --- CẢI TIẾN: Các hàm quản lý ID tin nhắn ---
+# --- CÁC HÀM TIỆN ÍCH QUẢN LÝ ID (GIỮ NGUYÊN) ---
 def _save_last_message_id(message_id: int):
     """Lưu ID của tin nhắn đã gửi vào file."""
     try:
@@ -61,7 +63,6 @@ def delete_telegram_message(message_id: int):
             "message_id": message_id
         }, timeout=10)
         
-        # Ghi log chi tiết phản hồi từ Telegram
         response_json = resp.json()
         if not response_json.get("ok"):
              logger.warning(f"Không thể xóa tin nhắn Telegram {message_id}. Phản hồi từ Telegram: {resp.text}")
@@ -70,7 +71,33 @@ def delete_telegram_message(message_id: int):
     except Exception as e:
         logger.error(f"Ngoại lệ khi xóa tin nhắn Telegram {message_id}: {e}")
 
-# --- Hàm send_telegram_message giữ nguyên ---
+# --- CẢI TIẾN: Hàm Forward tin nhắn ---
+def forward_telegram_message(from_chat_id: str, message_id: int, to_chat_id: Optional[str]):
+    """
+    Chuyển tiếp tin nhắn từ chat ID nguồn sang chat ID đích.
+    Hàm này chỉ chạy nếu to_chat_id được cung cấp và hợp lệ.
+    """
+    if not can_send() or not message_id or not to_chat_id:
+        if not to_chat_id:
+             logger.info("Bỏ qua Forward: Không có chat ID đích để forward tin nhắn.")
+        return
+        
+    try:
+        logger.info(f"Đang yêu cầu Telegram forward tin nhắn ID {message_id} từ {from_chat_id} đến {to_chat_id}...")
+        resp = requests.post(_bot_api("forwardMessage"), json={
+            "chat_id": to_chat_id, # Chat đích là Archive ID
+            "from_chat_id": from_chat_id, # Chat nguồn là Chat ID thông báo chính
+            "message_id": message_id
+        }, timeout=10)
+        
+        response_json = resp.json()
+        if not response_json.get("ok"):
+            logger.warning(f"Không thể forward tin nhắn Telegram {message_id}. Phản hồi: {resp.text}")
+        else:
+            logger.info(f"Đã forward thành công tin nhắn ID: {message_id}")
+    except Exception as e:
+        logger.error(f"Ngoại lệ khi forward tin nhắn Telegram {message_id}: {e}")
+
 def send_telegram_message(text: str) -> dict:
     """Gửi một tin nhắn văn bản. Trả về JSON phản hồi hoặc một stub nếu bị vô hiệu hóa."""
     if not can_send():
@@ -85,7 +112,7 @@ def send_telegram_message(text: str) -> dict:
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
-# --- Hàm format_pending_list_for_telegram giữ nguyên ---
+# --- Hàm format_pending_list_for_telegram (GIỮ NGUYÊN) ---
 def format_pending_list_for_telegram(pending_guests: List[models.Guest]) -> str:
     """Định dạng danh sách khách đang chờ thành một tin nhắn Telegram duy nhất."""
     now = get_local_time().strftime('%H:%M %d/%m/%Y')
@@ -115,33 +142,45 @@ def format_pending_list_for_telegram(pending_guests: List[models.Guest]) -> str:
         
     return message
 
-# --- CẢI TIẾN: Bổ sung logging chi tiết vào toàn bộ quy trình ---
+# --- Hàm run_pending_list_notification (CẬP NHẬT LOGIC FORWARD) ---
 def run_pending_list_notification():
     """
-    Hàm chạy nền: Xóa tin nhắn cũ, lấy danh sách khách đang chờ và gửi một thông báo tổng hợp mới.
+    Hàm chạy nền: Xóa tin nhắn cũ (sau khi forward), lấy danh sách khách đang chờ và gửi một thông báo tổng hợp mới.
     """
     logger.info("Bắt đầu tác vụ gửi thông báo danh sách chờ...")
     
-    # 1. Đọc và xóa tin nhắn cũ
+    # 1. Đọc tin nhắn cũ
     last_message_id = _read_last_message_id()
+    
     if last_message_id:
-        logger.info(f"Đã tìm thấy ID tin nhắn cũ: {last_message_id}. Đang tiến hành xóa...")
+        logger.info(f"Đã tìm thấy ID tin nhắn cũ: {last_message_id}.")
+        
+        # --- CẢI TIẾN: Thực hiện Forward tin nhắn cũ trước khi xóa ---
+        # Hàm forward_telegram_message sẽ tự động kiểm tra TELEGRAM_ARCHIVE_CHAT_ID
+        forward_telegram_message(
+            from_chat_id=TELEGRAM_CHAT_ID, 
+            message_id=last_message_id, 
+            to_chat_id=TELEGRAM_ARCHIVE_CHAT_ID
+        )
+
+        # 2. Xóa tin nhắn cũ (như logic cũ)
+        logger.info("Đang tiến hành xóa tin nhắn cũ...")
         delete_telegram_message(last_message_id)
     else:
         logger.info("Không tìm thấy ID tin nhắn cũ, sẽ gửi tin nhắn mới.")
 
-    # 2. Lấy danh sách mới và tạo nội dung
+    # 3. Lấy danh sách mới và tạo nội dung
     db: Session = SessionLocal()
     try:
         pending_guests = db.query(models.Guest).filter(models.Guest.status == 'pending').order_by(models.Guest.created_at.asc()).all()
         logger.info(f"Tìm thấy {len(pending_guests)} khách đang chờ.")
         message_text = format_pending_list_for_telegram(pending_guests)
         
-        # 3. Gửi tin nhắn mới
+        # 4. Gửi tin nhắn mới
         logger.info("Đang gửi tin nhắn mới...")
         response_data = send_telegram_message(message_text)
         
-        # 4. Lưu ID của tin nhắn mới nếu gửi thành công
+        # 5. Lưu ID của tin nhắn mới nếu gửi thành công
         if response_data.get("ok"):
             new_message_id = response_data.get("result", {}).get("message_id")
             if new_message_id:
@@ -155,4 +194,3 @@ def run_pending_list_notification():
     finally:
         db.close()
     logger.info("Hoàn tất tác vụ gửi thông báo.")
-

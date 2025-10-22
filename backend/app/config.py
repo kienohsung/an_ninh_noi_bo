@@ -26,8 +26,10 @@ class Settings(BaseSettings):
     # --- SỬA LỖI: Thêm các biến môi trường cho Telegram vào đây ---
     NOTIFY_TELEGRAM_ENABLED: bool = False
     TELEGRAM_BOT_TOKEN: str = "8014586502:AAFSMiARi8xIB6d26vaGiHbr-QQciJFDd5k"
-    TELEGRAM_CHAT_ID: str = "-4898009736"
+    TELEGRAM_CHAT_ID: str = "-1003121251250"
     # ---------------------------------------------------------
+    # --- CẢI TIẾN: Thêm ID chat lưu trữ (sử dụng Chat ID bạn cung cấp) ---
+    TELEGRAM_ARCHIVE_CHAT_ID: Optional[str] = "-4884291349"
 
     # --- Cấu hình mới cho Google Sheets ---
     GSHEETS_CREDENTIALS_PATH: str = "credentials.json"
