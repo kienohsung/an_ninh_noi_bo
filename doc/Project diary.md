@@ -117,6 +117,33 @@ Giới hạn điểm biểu đồ (downsample) nếu quá dày
 
 
 
+# 23.10.2025
+# 🧾 Tài liệu Kỹ thuật: Tính năng Thông báo Telegram (Hệ thống An ninh Nội bộ)
+## 1. Tổng quan
+
+Tính năng này cung cấp **thông báo thời gian thực** về hoạt động **đăng ký và xác nhận khách ra/vào cổng** thông qua bot Telegram.  
+Hệ thống được thiết kế để phục vụ **hai mục đích riêng biệt**, tương ứng với **hai kênh Telegram**:
+
+- **Kênh Chính (Main Channel):**  
+  Hiển thị như một *bảng điều khiển thời gian thực* (real-time dashboard), chỉ thể hiện **trạng thái hiện tại** của danh sách khách đang chờ vào cổng.  
+  → Tin nhắn trên kênh này **liên tục được cập nhật** (chỉ có 1 tin duy nhất tồn tại tại mọi thời điểm).
+
+- **Kênh Lưu trữ (Archive/Log Channel):**  
+  Hoạt động như một *nhật ký sự kiện* (event log), ghi lại **toàn bộ lịch sử** các hành động quan trọng (đăng ký mới, xác nhận vào cổng) dưới dạng **tin nhắn riêng biệt**, **không bao giờ bị xóa**.
+
+---
+## 2. Kiến trúc Hệ thống
+
+Tính năng được triển khai dựa trên các nguyên tắc sau:
+
+### 🔹 Tác vụ nền (Background Tasks)
+Mọi thao tác gửi thông báo Telegram được thực hiện thông qua **BackgroundTasks** của **FastAPI**.  
+Điều này giúp **API phản hồi ngay lập tức** (ví dụ `POST /guests`), mà không cần chờ phản hồi từ Telegram API.
+
+### 🔹 Module hóa
+Logic lõi được tập trung tại file:
+
+
 # 22.10.2025
 # 🛰️ Tổng Kết Tính Năng: Lưu Trữ Lịch Sử Thông Báo Telegram
 
