@@ -118,7 +118,7 @@ Giới hạn điểm biểu đồ (downsample) nếu quá dày
 
 
 # 23.10.2025
-# 🧾 Tài liệu Kỹ thuật: Tính năng Thông báo Telegram (Hệ thống An ninh Nội bộ)
+# 🧾 Tài liệu Kỹ thuật: Cải tiến Tính năng Thông báo Telegram 
 ## 1. Tổng quan
 
 Tính năng này cung cấp **thông báo thời gian thực** về hoạt động **đăng ký và xác nhận khách ra/vào cổng** thông qua bot Telegram.  
@@ -142,6 +142,143 @@ Mọi thao tác gửi thông báo Telegram được thực hiện thông qua **B
 
 ### 🔹 Module hóa
 Logic lõi được tập trung tại file:
+```
+
+backend/app/utils/notifications.py
+
+```
+Các **router (endpoints)** chỉ gọi lại các hàm từ module này.
+
+### 🔹 Quản lý Trạng thái (Stateful) cho Kênh Chính
+Sử dụng tệp:
+```
+
+backend/telegram_last_message_id.txt
+
+```
+để lưu **ID tin nhắn hiện tại**.  
+Hệ thống sẽ xóa tin nhắn cũ trước khi gửi tin mới, đảm bảo **kênh chính luôn chỉ có một tin duy nhất**.
+
+### 🔹 Không Trạng thái (Stateless) cho Kênh Lưu trữ
+Kênh này **chỉ nhận thêm tin nhắn mới**, không xóa hay theo dõi bất kỳ tin nào — đúng tính chất *ghi log*.
+
+---
+## 3. Cấu hình
+
+Hệ thống yêu cầu các **biến môi trường** (được nạp qua `config.py`) như sau:
+
+| Biến môi trường | Kiểu dữ liệu | Mô tả |
+|------------------|--------------|--------|
+| `NOTIFY_TELEGRAM_ENABLED` | Boolean | Bật/tắt tính năng thông báo Telegram |
+| `TELEGRAM_BOT_TOKEN` | String | Token của Telegram Bot |
+| `TELEGRAM_CHAT_ID` | String | ID của **Kênh Chính** |
+| `TELEGRAM_ARCHIVE_CHAT_ID` | String | ID của **Kênh Lưu trữ** |
+
+---
+## 4. Luồng hoạt động Chi tiết
+
+### ⚙️ 4.1. Luồng 1 – Cập nhật Kênh Chính (Danh sách chờ)
+
+Kích hoạt khi có thay đổi trong hàng đợi (đăng ký mới hoặc xác nhận vào cổng).
+
+**Hàm chính:** `run_pending_list_notification()`
+
+#### Được gọi từ:
+- `routers/guests.py`: khi tạo khách lẻ hoặc theo đoàn  
+- `routers/guests_confirm.py`: khi xác nhận khách vào cổng
+
+#### Các bước:
+1. Kiểm tra `can_send_main()`  
+2. Đọc `telegram_last_message_id.txt` → lấy `last_message_id`  
+3. Nếu tồn tại → gọi `delete_telegram_message(last_message_id)` để xóa tin cũ  
+4. Mở **Session** CSDL mới  
+5. Truy vấn khách có `status == 'pending'`, kèm `joinedload(registered_by)`  
+6. Định dạng nội dung bằng `format_pending_list_for_telegram()`  
+7. Gửi tin mới qua `send_telegram_message()`  
+8. Lưu `new_message_id` vào file trạng thái  
+
+✅ **Kết quả:**  
+Kênh Chính luôn hiển thị **1 tin nhắn duy nhất**, thể hiện *snapshot mới nhất* của hàng đợi.
+
+---
+
+### 🗒️ 4.2. Luồng 2 – Ghi nhật ký sự kiện (Kênh Lưu trữ)
+
+Kích hoạt khi có một **sự kiện cụ thể** xảy ra.
+
+**Hàm chính:**  
+`send_event_to_archive_background(guest_id, event_type, triggered_by_user_id)`
+
+#### Được gọi từ:
+- `routers/guests.py → create_guest`: `event_type="Đăng ký mới"`
+- `routers/guests.py → create_guests_bulk`: `event_type="Đăng ký mới (theo đoàn)"`
+- `routers/guests_confirm.py → confirm_in`: `event_type="Xác nhận vào cổng"`
+
+#### Các bước:
+1. Kiểm tra `can_send_archive()`  
+2. Mở **Session** CSDL mới  
+3. Truy vấn:
+   - `guest` (thông tin khách + người đăng ký)
+   - `triggered_by_user` (người thực hiện hành động)
+4. Định dạng tin nhắn bằng `format_event_for_archive()`  
+5. Gửi tin đến `TELEGRAM_ARCHIVE_CHAT_ID`
+
+✅ **Kết quả:**  
+Kênh Lưu trữ ghi lại **một tin nhắn cho mỗi sự kiện**, tạo nên **lịch sử chi tiết và đầy đủ**.
+
+---
+## 5. Các Thành phần Mã nguồn Chính
+
+### 📁 5.1. `backend/app/utils/notifications.py`
+
+Module lõi, chứa toàn bộ logic:
+
+- `can_send_main()` / `can_send_archive()` – kiểm tra cấu hình  
+- `_save_last_message_id()` / `_read_last_message_id()` – quản lý file trạng thái  
+- `delete_telegram_message()` – gọi API `deleteMessage`  
+- `send_telegram_message()` – gửi API `sendMessage` (với `parse_mode="HTML"`)  
+- `format_pending_list_for_telegram()` – định dạng nội dung cho Kênh Chính  
+- `format_event_for_archive()` – định dạng nội dung cho Kênh Lưu trữ  
+- `run_pending_list_notification()` – chạy nền cho luồng cập nhật danh sách  
+- `send_event_to_archive_background()` – chạy nền cho luồng ghi nhật ký  
+
+---
+
+### 📁 5.2. `backend/app/routers/guests.py`
+
+- `create_guest(..., bg: BackgroundTasks)`  
+  - Sau `db.commit()`:  
+    - `bg.add_task(send_event_to_archive_background, ...)` → ghi nhật ký  
+    - `bg.add_task(run_pending_list_notification)` → cập nhật Kênh Chính  
+
+- `create_guests_bulk(..., bg: BackgroundTasks)`  
+  - Sau `db.commit()`:  
+    - Lặp qua danh sách khách → gọi `send_event_to_archive_background` cho từng người  
+    - Gọi `run_pending_list_notification` một lần để cập nhật Kênh Chính  
+
+---
+
+### 📁 5.3. `backend/app/routers/guests_confirm.py`
+
+- `confirm_in(..., bg: BackgroundTasks)`  
+  - Nếu có thay đổi trạng thái (`guest_updated=True`):  
+    - `bg.add_task(send_event_to_archive_background, ...)`  
+    - `bg.add_task(run_pending_list_notification)`  
+
+---
+## 6. Chi tiết Kỹ thuật Khác
+
+- **HTML Escaping:**  
+  Các hàm `format_...` đều escape ký tự đặc biệt (`<`, `>`, `&`, …) để tránh lỗi `parse_mode="HTML"`.
+
+- **Lấy dữ liệu trong Tác vụ nền:**  
+  Các hàm nền chỉ nhận **ID** (`guest_id`, `user_id`), sau đó tự mở **phiên CSDL mới** để đảm bảo dữ liệu luôn **mới nhất** và tránh lỗi *session-threading* của SQLAlchemy.
+
+---
+
+🧠 **Tổng kết:**
+> Hệ thống thông báo Telegram được thiết kế tối ưu cho hiệu năng và độ tin cậy, phân tách rõ ràng giữa *hiển thị tức thời* (Main Channel) và *lưu trữ sự kiện* (Archive Channel), đồng thời đảm bảo các tiến trình gửi tin nhắn hoạt động song song, không ảnh hưởng đến trải nghiệm người dùng.
+
 
 
 # 22.10.2025
