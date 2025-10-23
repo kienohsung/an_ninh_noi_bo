@@ -19,21 +19,32 @@ from ..database import unaccent_string
 # Cập nhật import: Thêm hàm gửi sự kiện lưu trữ
 from ..utils.notifications import run_pending_list_notification, send_event_to_archive_background
 from ..utils.plate_formatter import format_license_plate
+# --- THÊM IMPORT MỚI ĐỂ CHUẨN HÓA TÊN ---
+from ..utils.name_formatter import format_full_name
+# --- KẾT THÚC THÊM IMPORT ---
 
 router = APIRouter(prefix="/guests", tags=["guests"])
 logger = logging.getLogger(__name__)
+
 
 @router.post("/", response_model=schemas.GuestRead, dependencies=[Depends(require_roles("admin", "manager", "staff"))])
 def create_guest(payload: schemas.GuestCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user), bg: BackgroundTasks = BackgroundTasks()):
     """
     Tạo một bản ghi khách lẻ mới.
     """
-    # Chuẩn hóa biển số ngay khi nhận được yêu cầu
+    # Chuẩn hóa biển số ngay khi nhận được yêu cầu (code cũ)
     if payload.license_plate:
         payload.license_plate = format_license_plate(payload.license_plate)
 
+    # --- THÊM MỚI: CHUẨN HÓA HỌ TÊN ---
+    # Tự động chuẩn hóa họ tên sang dạng Title Case trước khi lưu
+    standardized_full_name = format_full_name(payload.full_name)
+    # --- KẾT THÚC THÊM MỚI ---
+
     guest = models.Guest(
-        full_name=payload.full_name,
+        # --- THAY ĐỔI: SỬ DỤNG TÊN ĐÃ CHUẨN HÓA ---
+        full_name=standardized_full_name,
+        # --- KẾT THÚC THAY ĐỔI ---
         id_card_number=payload.id_card_number or "",
         company=payload.company or "",
         reason=payload.reason or "",
@@ -44,14 +55,14 @@ def create_guest(payload: schemas.GuestCreate, db: Session = Depends(get_db), us
     )
     db.add(guest)
     db.commit()
-    db.refresh(guest) # Cần refresh để lấy guest.id
+    db.refresh(guest) # Cần refresh để lấy guest.id (code cũ)
 
-    # --- THÊM MỚI: Gửi sự kiện đăng ký mới đến kênh lưu trữ ---
+    # --- THÊM MỚI: Gửi sự kiện đăng ký mới đến kênh lưu trữ --- (code cũ)
     # Gửi id của khách và người dùng hiện tại
     bg.add_task(send_event_to_archive_background, guest.id, "Đăng ký mới", user.id)
-    # --- KẾT THÚC THÊM MỚI ---
+    # --- KẾT THÚC THÊM MỚI --- (code cũ)
 
-    # Kích hoạt cập nhật danh sách chờ trên kênh chính
+    # Kích hoạt cập nhật danh sách chờ trên kênh chính (code cũ)
     bg.add_task(run_pending_list_notification)
 
     return guest
@@ -86,18 +97,27 @@ async def upload_guest_image(guest_id: int, file: UploadFile = File(...), db: Se
         logger.error(f"Could not upload image for guest {guest_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Could not upload image")
 
+
 @router.post("/bulk", response_model=list[schemas.GuestRead], dependencies=[Depends(require_roles("admin", "manager", "staff"))])
 def create_guests_bulk(payload: schemas.GuestBulkCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user), bg: BackgroundTasks = BackgroundTasks()):
-    new_guests_db = [] # Lưu các đối tượng Guest sau khi commit
+    new_guests_db = [] # Lưu các đối tượng Guest sau khi commit (code cũ)
 
-    # Chuẩn hóa biển số cho cả đoàn
+    # Chuẩn hóa biển số cho cả đoàn (code cũ)
     formatted_plate = format_license_plate(payload.license_plate) if payload.license_plate else ""
 
     for individual in payload.guests:
         if not individual.full_name:
             continue
+            
+        # --- THÊM MỚI: CHUẨN HÓA HỌ TÊN CỦA TỪNG KHÁCH ---
+        # Tự động chuẩn hóa họ tên của từng người trong đoàn
+        standardized_individual_name = format_full_name(individual.full_name)
+        # --- KẾT THÚC THÊM MỚI ---
+
         guest = models.Guest(
-            full_name=individual.full_name,
+            # --- THAY ĐỔI: SỬ DỤNG TÊN ĐÃ CHUẨN HÓA ---
+            full_name=standardized_individual_name,
+            # --- KẾT THÚC THAY ĐỔI ---
             id_card_number=individual.id_card_number or "",
             company=payload.company or "",
             reason=payload.reason or "",
@@ -107,25 +127,26 @@ def create_guests_bulk(payload: schemas.GuestBulkCreate, db: Session = Depends(g
             registered_by_user_id=user.id
         )
         db.add(guest)
-        # Lưu tạm thời để gửi thông báo sau khi commit
+        # Lưu tạm thời để gửi thông báo sau khi commit (code cũ)
         new_guests_db.append(guest)
 
     if not new_guests_db:
         raise HTTPException(status_code=400, detail="No valid guests to add.")
 
-    db.commit() # Commit tất cả khách mới
+    db.commit() # Commit tất cả khách mới (code cũ)
 
-    # --- THÊM MỚI: Gửi sự kiện lưu trữ cho từng khách trong đoàn ---
+    # --- THÊM MỚI: Gửi sự kiện lưu trữ cho từng khách trong đoàn --- (code cũ)
     for guest in new_guests_db:
         db.refresh(guest) # Cần refresh để lấy guest.id
         bg.add_task(send_event_to_archive_background, guest.id, "Đăng ký mới (theo đoàn)", user.id)
-    # --- KẾT THÚC THÊM MỚI ---
+    # --- KẾT THÚC THÊM MỚI --- (code cũ)
 
-    # Kích hoạt cập nhật kênh chính (chỉ 1 lần sau khi thêm cả đoàn)
+    # Kích hoạt cập nhật kênh chính (chỉ 1 lần sau khi thêm cả đoàn) (code cũ)
     bg.add_task(run_pending_list_notification)
 
-    # Trả về danh sách khách đã tạo (cần refresh lại để có id)
+    # Trả về danh sách khách đã tạo (cần refresh lại để có id) (code cũ)
     return new_guests_db
+
 
 @router.get("/", response_model=list[schemas.GuestReadWithUser])
 def list_guests(
