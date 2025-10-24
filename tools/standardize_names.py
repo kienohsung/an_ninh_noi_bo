@@ -45,7 +45,9 @@ def format_full_name(name: str) -> str:
     if not name or not isinstance(name, str):
         return ""
     # Dùng .title() để viết hoa ký tự đầu mỗi từ
-    return name.strip().title()
+    # CODE CŨ: return name.strip().title()
+    # CODE MỚI: Thêm .lower() để xử lý các trường hợp chữ hoa không đồng nhất (như 'NguyễN')
+    return name.strip().lower().title() # PHẦN CODE SỬA ĐỔI
 
 def main():
     print(f"--- Công cụ Chuẩn hóa Họ Tên (Title Case) cho Database SQLite ---")
