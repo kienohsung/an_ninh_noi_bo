@@ -44,6 +44,10 @@ class GuestBase(BaseModel):
     reason: Optional[str] = ""
     license_plate: Optional[str] = ""
     supplier_name: Optional[str] = ""
+    # --- NÂNG CẤP: Thay estimated_time bằng estimated_datetime ---
+    # (Đã xóa trường estimated_time cũ)
+    estimated_datetime: Optional[datetime] = None
+    # --- KẾT THÚC NÂNG CẤP ---
 
 class GuestCreate(GuestBase):
     pass
@@ -58,6 +62,10 @@ class GuestUpdate(BaseModel):
     status: Optional[str] = None
     check_in_time: Optional[datetime] = None
     check_out_time: Optional[datetime] = None
+    # --- NÂNG CẤP: Thay estimated_time bằng estimated_datetime ---
+    # (Đã xóa trường estimated_time cũ)
+    estimated_datetime: Optional[datetime] = None
+    # --- KẾT THÚC NÂNG CẤP ---
 
 class GuestRead(GuestBase):
     id: int
@@ -66,6 +74,7 @@ class GuestRead(GuestBase):
     check_out_time: Optional[datetime] = None
     registered_by_user_id: Optional[int] = None
     created_at: datetime
+    # estimated_datetime được kế thừa từ GuestBase
     model_config = ConfigDict(from_attributes=True)
 
 class GuestReadWithUser(GuestRead):
@@ -87,6 +96,10 @@ class GuestBulkCreate(BaseModel):
     reason: Optional[str] = ""
     license_plate: Optional[str] = ""
     supplier_name: Optional[str] = ""
+    # --- NÂNG CẤP: Thay estimated_time bằng estimated_datetime ---
+    # (Đã xóa trường estimated_time cũ)
+    estimated_datetime: Optional[datetime] = None
+    # --- KẾT THÚC NÂNG CẤP ---
 
 class TokenRefreshRequest(BaseModel):
     refresh_token: str
@@ -126,6 +139,10 @@ class LongTermGuestBase(BaseModel):
     supplier_name: Optional[str] = ""
     start_date: date
     end_date: date
+    # --- NÂNG CẤP: Thay estimated_time bằng estimated_datetime ---
+    # (Đã xóa trường estimated_time cũ)
+    estimated_datetime: Optional[datetime] = None
+    # --- KẾT THÚC NÂNG CẤP ---
 
 class LongTermGuestCreate(LongTermGuestBase):
     pass
@@ -140,12 +157,17 @@ class LongTermGuestUpdate(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     is_active: Optional[bool] = None
+    # --- NÂNG CẤP: Thay estimated_time bằng estimated_datetime ---
+    # (Đã xóa trường estimated_time cũ)
+    estimated_datetime: Optional[datetime] = None
+    # --- KẾT THÚC NÂNG CẤP ---
 
 class LongTermGuestRead(LongTermGuestBase):
     id: int
     is_active: bool
     registered_by_user_id: int
     created_at: datetime
+    # estimated_datetime được kế thừa từ LongTermGuestBase
     model_config = ConfigDict(from_attributes=True)
 
 # SỬA LỖI: Thêm schema LongTermGuestReadWithUser

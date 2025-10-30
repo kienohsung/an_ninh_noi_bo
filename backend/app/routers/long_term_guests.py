@@ -49,6 +49,10 @@ def create_long_term_guest(
                 license_plate=payload.license_plate or "",
                 supplier_name=payload.supplier_name or "",
                 status="pending",
+                # --- NÂNG CẤP: Thay estimated_time bằng estimated_datetime ---
+                # (Đã xóa estimated_time)
+                estimated_datetime=payload.estimated_datetime, # Sao chép datetime
+                # --- KẾT THÚC NÂNG CẤP ---
                 registered_by_user_id=user.id,
                 created_at=get_local_time() # Ghi nhận thời gian tạo thực tế
             )
@@ -99,8 +103,17 @@ def update_long_term_guest(
     if end_date < start_date:
         raise HTTPException(status_code=400, detail="End date cannot be earlier than start date.")
 
+    # --- NÂNG CẤP: Xử lý estimated_datetime ---
+    # Xử lý riêng (cho phép set thành None)
+    if 'estimated_datetime' in update_data:
+        db_guest.estimated_datetime = update_data['estimated_datetime']
+        del update_data['estimated_datetime']
+    # --- KẾT THÚC NÂNG CẤP ---
+
     for key, value in update_data.items():
-        setattr(db_guest, key, value)
+        # Bỏ qua trường estimated_time (đã bị xóa)
+        if key != 'estimated_time':
+            setattr(db_guest, key, value)
         
     db.commit()
     db.refresh(db_guest)

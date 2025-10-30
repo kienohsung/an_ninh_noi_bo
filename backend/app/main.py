@@ -113,6 +113,10 @@ def create_daily_guest_entries():
                     license_plate=lt.license_plate,
                     supplier_name=lt.supplier_name,
                     status="pending",
+                    # --- NÂNG CẤP: Thay estimated_time bằng estimated_datetime ---
+                    # (Đã xóa estimated_time)
+                    estimated_datetime=lt.estimated_datetime, # Sao chép datetime
+                    # --- KẾT THÚC NÂNG CẤP ---
                     registered_by_user_id=lt.registered_by_user_id,
                     created_at=now_tz,  # theo TZ
                 )
@@ -173,7 +177,7 @@ def on_startup():
         sched = BackgroundScheduler(timezone=settings.TZ)
         sched.add_job(
             create_daily_guest_entries,
-            trigger=IntervalTrigger(minutes=60),
+            trigger=IntervalTrigger(minutes=60), # Giữ nguyên 60 phút
             id="create_daily_guests_job",
             name="Create daily guest entries from long-term registrations",
             replace_existing=True,
@@ -183,7 +187,8 @@ def on_startup():
         )
         sched.start()
         app.state.scheduler = sched  # giữ tham chiếu để tránh GC
-        logging.info(f"[long_term] Scheduler started: every 1 minute (TZ={settings.TZ}).")
+        # Sửa log: từ 1 phút thành 60 phút
+        logging.info(f"[long_term] Scheduler started: every 60 minutes (TZ={settings.TZ}).")
     except Exception as e:
         logging.error(f"[long_term] Could not start the scheduler: {e}", exc_info=True)
 
@@ -197,3 +202,4 @@ def on_shutdown():
             logging.info("[long_term] Scheduler shutdown done.")
     except Exception as e:
         logging.warning(f"[long_term] Scheduler shutdown error: {e}")
+

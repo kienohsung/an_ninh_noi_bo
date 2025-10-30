@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import requests
 import logging
+import pytz # --- THÊM MỚI: Cần cho múi giờ ---
 from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload # Thêm joinedload
 
@@ -117,12 +118,33 @@ def format_pending_list_for_telegram(pending_guests: List[models.Guest]) -> str:
         id_card = (guest.id_card_number or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         supplier = (guest.supplier_name or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         plate = (guest.license_plate or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
+        # --- NÂNG CẤP: Lấy và escape Ngày giờ dự kiến ---
+        estimated_datetime_str = "N/A"
+        if guest.estimated_datetime:
+            try:
+                # Chuyển đổi sang múi giờ local (TZ) trước khi format
+                local_dt = guest.estimated_datetime.astimezone(pytz.timezone(settings.TZ))
+                estimated_datetime_str = local_dt.strftime("%d/%m %H:%M") # Format: 30/10 09:30
+            except Exception:
+                 # Fallback nếu datetime không có thông tin múi giờ
+                try:
+                    estimated_datetime_str = guest.estimated_datetime.strftime("%d/%m %H:%M")
+                except Exception:
+                     estimated_datetime_str = str(guest.estimated_datetime) # Fallback cuối cùng
+        
+        estimated_datetime_str = estimated_datetime_str.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        # --- KẾT THÚC NÂNG CẤP ---
+
         # Lấy tên người đăng ký trực tiếp nếu có joinload
         registered_by_name = guest.registered_by.full_name if guest.registered_by else "Không rõ"
         registered_by_name = registered_by_name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
         lines.append("--------------------")
         lines.append(f"{i} - <b>{full_name}</b> - {id_card}")
+        # --- NÂNG CẤP: Hiển thị Ngày giờ dự kiến ---
+        lines.append(f"   Dự kiến: {estimated_datetime_str}")
+        # --- KẾT THÚC NÂNG CẤP ---
         lines.append(f"   BKS: {plate}")
         lines.append(f"   NCC: {supplier}")
         lines.append(f"   Người ĐK: {registered_by_name}") # Thêm tên người đăng ký
@@ -169,6 +191,23 @@ def format_event_for_archive(guest: models.Guest, event_type: str, user_who_trig
     supplier = (guest.supplier_name or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
     reason = (guest.reason or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
+    # --- NÂNG CẤP: Lấy và escape Ngày giờ dự kiến ---
+    estimated_datetime_str = "N/A"
+    if guest.estimated_datetime:
+        try:
+            # Chuyển đổi sang múi giờ local (TZ) trước khi format
+            local_dt = guest.estimated_datetime.astimezone(pytz.timezone(settings.TZ))
+            estimated_datetime_str = local_dt.strftime("%d/%m %H:%M") # Format: 30/10 09:30
+        except Exception:
+             # Fallback nếu datetime không có thông tin múi giờ
+            try:
+                estimated_datetime_str = guest.estimated_datetime.strftime("%d/%m %H:%M")
+            except Exception:
+                 estimated_datetime_str = str(guest.estimated_datetime) # Fallback cuối cùng
+    
+    estimated_datetime_str = estimated_datetime_str.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    # --- KẾT THÚC NÂNG CẤP ---
+
     # Lấy tên người đăng ký gốc (luôn cần)
     # guest.registered_by đã được joinedload trong send_event_to_archive_background
     registered_by_original = "Không rõ"
@@ -183,6 +222,9 @@ def format_event_for_archive(guest: models.Guest, event_type: str, user_who_trig
         f"{event_icon} <b>[SỰ KIỆN] {event_title}</b>",
         "", # Dòng trống
         f"👤 <b>Khách:</b> {full_name} ({id_card})",
+        # --- NÂNG CẤP: Hiển thị Ngày giờ dự kiến ---
+        f"⏰ <b>Dự kiến:</b> {estimated_datetime_str}",
+        # --- KẾT THÚC NÂNG CẤP ---
         f"📝 <b>Người ĐK:</b> {registered_by_original}",
         f"🚗 <b>BKS:</b> {plate}",
         f"💼 <b>Đơn vị:</b> {supplier}",

@@ -34,6 +34,13 @@ class Guest(Base):
     license_plate = Column(String(32), index=True, default="")
     supplier_name = Column(String(128), index=True, default="")
     status = Column(String(16), index=True, default="pending")  # pending, checked_in, checked_out
+    
+    # --- NÂNG CẤP: Thay estimated_time bằng estimated_datetime ---
+    # (Đã xóa cột estimated_time cũ)
+    # Thêm cột để lưu ngày VÀ giờ dự kiến khách vào
+    estimated_datetime = Column(DateTime, nullable=True)
+    # --- KẾT THÚC NÂNG CẤP ---
+    
     check_in_time = Column(DateTime, nullable=True)
     check_out_time = Column(DateTime, nullable=True)
     registered_by_user_id = Column(Integer, ForeignKey("users.id"))
@@ -80,6 +87,13 @@ class LongTermGuest(Base):
     reason = Column(Text, default="")
     license_plate = Column(String(32), default="")
     supplier_name = Column(String(128), default="")
+    
+    # --- NÂNG CẤP: Thay estimated_time bằng estimated_datetime ---
+    # (Đã xóa cột estimated_time cũ)
+    # Thêm cột để lưu ngày VÀ giờ dự kiến khách vào
+    estimated_datetime = Column(DateTime, nullable=True)
+    # --- KẾT THÚC NÂNG CẤP ---
+    
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
     is_active = Column(Boolean, default=True)
@@ -87,3 +101,4 @@ class LongTermGuest(Base):
     created_at = Column(DateTime, default=get_local_time)
 
     registered_by = relationship("User", foreign_keys=[registered_by_user_id])
+

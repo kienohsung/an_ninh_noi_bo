@@ -75,21 +75,56 @@
           <!-- Form đăng ký theo đoàn -->
           <div v-if="isBulk">
             <div class="text-caption q-mb-sm">Nhập thông tin chung cho đoàn:</div>
+            <!-- THÊM MỚI: Bổ sung estimated_time, thay đổi grid thành md-4 -->
             <div class="row q-col-gutter-md">
-              <div class="col-12 col-md-6">
+              <div class="col-12 col-md-4">
                 <q-input v-model="form.supplier_name" label="Nhà cung cấp" dense outlined>
                   <template v-slot:append>
                     <q-btn round dense flat icon="search" @click="openSearchDialog('supplier', 'main')" />
                   </template>
                 </q-input>
               </div>
-              <div class="col-12 col-md-6">
+              <div class="col-12 col-md-4">
                  <q-input v-model="form.license_plate" label="Biển số" dense outlined>
                   <template v-slot:append>
                     <q-btn round dense flat icon="search" @click="openSearchDialog('plate', 'main')" />
                   </template>
                 </q-input>
               </div>
+              
+              <!-- BẮT ĐẦU NÂNG CẤP: Thay thế input time bằng DateTime Picker (Form Đoàn) -->
+              <div class="col-12 col-md-4">
+                <q-input 
+                  v-model="formattedEstimatedDatetime" 
+                  label="Ngày & Giờ dự kiến" 
+                  dense 
+                  outlined 
+                  readonly 
+                  clearable 
+                  @clear="form.estimated_datetime = null"
+                  hint="Tùy chọn"
+                >
+                  <template v-slot:append>
+                    <!-- Thay đổi @click để gọi hàm chuẩn bị proxy -->
+                    <q-icon name="event" class="cursor-pointer" @click="openDateTimePickerProxy('main')">
+                      <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                        <div class="q-pa-md" style="min-width: 300px">
+                          <div class="q-gutter-md">
+                            <q-date v-model="proxyDate" mask="YYYY-MM-DD" />
+                            <q-time v-model="proxyTime" mask="HH:mm" format24h />
+                          </div>
+                          <div class="row items-center justify-end q-mt-md q-gutter-sm">
+                            <q-btn v-close-popup label="Bỏ qua" color="primary" flat />
+                            <q-btn v-close-popup label="OK" color="primary" @click="setEstimatedDatetime" />
+                          </div>
+                        </div>
+                      </q-popup-proxy>
+                    </q-icon>
+                  </template>
+                </q-input>
+              </div>
+              <!-- KẾT THÚC NÂNG CẤP -->
+
               <div class="col-12"><q-input type="textarea" v-model="form.reason" label="Chi tiết" outlined dense /></div>
             </div>
             <q-separator class="q-my-md" />
@@ -103,9 +138,44 @@
           </div>
 
           <!-- Form đăng ký 1 người -->
+          <!-- THÊM MỚI: Bổ sung estimated_time, thay đổi grid thành md-4 -->
           <div v-else class="row q-col-gutter-md">
-            <div class="col-12 col-md-6"><q-input v-model="form.full_name" label="Họ tên" dense outlined required /></div>
-            <div class="col-12 col-md-6"><q-input v-model="form.id_card_number" label="CCCD" dense outlined /></div>
+            <div class="col-12 col-md-4"><q-input v-model="form.full_name" label="Họ tên" dense outlined required /></div>
+            <div class="col-12 col-md-4"><q-input v-model="form.id_card_number" label="CCCD" dense outlined /></div>
+            
+            <!-- BẮT ĐẦU NÂNG CẤP: Thay thế input time bằng DateTime Picker (Form 1 người) -->
+            <div class="col-12 col-md-4">
+               <q-input 
+                v-model="formattedEstimatedDatetime" 
+                label="Ngày & Giờ dự kiến" 
+                dense 
+                outlined 
+                readonly 
+                clearable 
+                @clear="form.estimated_datetime = null"
+                hint="Tùy chọn"
+              >
+                <template v-slot:append>
+                  <!-- Thay đổi @click để gọi hàm chuẩn bị proxy -->
+                  <q-icon name="event" class="cursor-pointer" @click="openDateTimePickerProxy('main')">
+                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                      <div class="q-pa-md" style="min-width: 300px">
+                        <div class="q-gutter-md">
+                          <q-date v-model="proxyDate" mask="YYYY-MM-DD" />
+                          <q-time v-model="proxyTime" mask="HH:mm" format24h />
+                        </div>
+                        <div class="row items-center justify-end q-mt-md q-gutter-sm">
+                          <q-btn v-close-popup label="Bỏ qua" color="primary" flat />
+                          <q-btn v-close-popup label="OK" color="primary" @click="setEstimatedDatetime" />
+                        </div>
+                      </div>
+                    </q-popup-proxy>
+                  </q-icon>
+                </template>
+               </q-input>
+            </div>
+            <!-- KẾT THÚC NÂNG CẤP -->
+
             <div class="col-12 col-md-6">
               <q-input v-model="form.supplier_name" label="Nhà cung cấp" dense outlined>
                 <template v-slot:append>
@@ -193,6 +263,23 @@
               </q-chip>
             </q-td>
           </template>
+          
+          <!-- BẮT ĐẦU NÂNG CẤP: Định dạng ô Ngày & Giờ dự kiến -->
+          <template #body-cell-estimated_datetime="props">
+            <q-td :props="props">
+              <q-chip 
+                v-if="props.value" 
+                icon="schedule" 
+                :label="quasarDate.formatDate(props.value, 'DD/MM HH:mm')" 
+                dense 
+                outline 
+                size="sm"
+                color="blue-grey" 
+              />
+            </q-td>
+          </template>
+          <!-- KẾT THÚC NÂNG CẤP -->
+
           <template #body-cell-actions="props">
             <q-td :props="props">
               <q-btn flat dense icon="edit" @click.stop="editRow(props.row)" />
@@ -214,6 +301,38 @@
           <q-form @submit="onUpdateSubmit" class="q-gutter-md">
             <q-input v-model="editForm.full_name" label="Họ tên" dense outlined required />
             <q-input v-model="editForm.id_card_number" label="CCCD" dense outlined />
+            
+            <!-- BẮT ĐẦU NÂNG CẤP: Thêm DateTime Picker vào Dialog Sửa -->
+            <q-input 
+              v-model="formattedEditEstimatedDatetime" 
+              label="Ngày & Giờ dự kiến" 
+              dense 
+              outlined 
+              readonly 
+              clearable 
+              @clear="editForm.estimated_datetime = null"
+              hint="Tùy chọn"
+            >
+              <template v-slot:append>
+                <!-- Thay đổi @click để gọi hàm chuẩn bị proxy (target 'edit') -->
+                <q-icon name="event" class="cursor-pointer" @click="openDateTimePickerProxy('edit')">
+                  <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                    <div class="q-pa-md" style="min-width: 300px">
+                      <div class="q-gutter-md">
+                        <q-date v-model="proxyDate" mask="YYYY-MM-DD" />
+                        <q-time v-model="proxyTime" mask="HH:mm" format24h />
+                      </div>
+                      <div class="row items-center justify-end q-mt-md q-gutter-sm">
+                        <q-btn v-close-popup label="Bỏ qua" color="primary" flat />
+                        <q-btn v-close-popup label="OK" color="primary" @click="setEstimatedDatetime" />
+                      </div>
+                    </div>
+                  </q-popup-proxy>
+                </q-icon>
+              </template>
+            </q-input>
+            <!-- KẾT THÚC NÂNG CẤP -->
+
              <q-input v-model="editForm.supplier_name" label="Nhà cung cấp" dense outlined>
                 <template v-slot:append>
                   <q-btn round dense flat icon="search" @click="openSearchDialog('supplier', 'edit')" />
@@ -285,6 +404,17 @@
                     <q-list bordered separator>
                         <q-item><q-item-section><q-item-label overline>Họ tên</q-item-label><q-item-label>{{ activeGuest.full_name }}</q-item-label></q-item-section></q-item>
                         <q-item><q-item-section><q-item-label overline>CCCD</q-item-label><q-item-label>{{ activeGuest.id_card_number }}</q-item-label></q-item-section></q-item>
+                        
+                        <!-- BẮT ĐẦU NÂNG CẤP: Hiển thị Ngày & Giờ dự kiến trong chi tiết -->
+                        <q-item v-if="activeGuest.estimated_datetime">
+                          <q-item-section>
+                            <q-item-label overline>Ngày & Giờ dự kiến</q-item-label>
+                            <!-- Định dạng lại cho đẹp -->
+                            <q-item-label>{{ quasarDate.formatDate(activeGuest.estimated_datetime, 'HH:mm - DD/MM/YYYY') }}</q-item-label>
+                          </q-item-section>
+                        </q-item>
+                        <!-- KẾT THÚC NÂNG CẤP -->
+
                         <q-item><q-item-section><q-item-label overline>Nhà cung cấp</q-item-label><q-item-label>{{ activeGuest.supplier_name }}</q-item-label></q-item-section></q-item>
                         <q-item><q-item-section><q-item-label overline>Biển số</q-item-label><q-item-label>{{ activeGuest.license_plate }}</q-item-label></q-item-section></q-item>
                         <q-item><q-item-section><q-item-label overline>Người đăng ký</q-item-label><q-item-label>{{ activeGuest.registered_by_name }}</q-item-label></q-item-section></q-item>
@@ -388,11 +518,15 @@ const auth = useAuthStore()
 const isAdmin = computed(() => auth.user?.role === 'admin')
 const isManager = computed(() => auth.user?.role === 'manager')
 
+// --- BẮT ĐẦU NÂNG CẤP: Thay estimated_time bằng estimated_datetime ---
 const initialFormState = {
   full_name: '', id_card_number: '', company: '', reason: '',
   license_plate: '', supplier_name: '',
+  estimated_datetime: null, // <-- NÂNG CẤP
   guests: [{ full_name: '', id_card_number: '' }]
 }
+// --- KẾT THÚC NÂNG CẤP ---
+
 const form = reactive({ ...initialFormState })
 const isBulk = ref(false)
 const isLongTerm = ref(false)
@@ -403,10 +537,15 @@ const q = ref('')
 const fileInputRef = ref(null)
 const suggestions = reactive({ companies: [], license_plates: [], supplier_names: [] })
 const showEditDialog = ref(false)
+
+// --- BẮT ĐẦU NÂNG CẤP: Thêm estimated_datetime vào form sửa ---
 const editForm = reactive({
   id: null, full_name: '', id_card_number: '', company: '',
-  reason: '', license_plate: '', supplier_name: '', images: []
+  reason: '', license_plate: '', supplier_name: '', images: [],
+  estimated_datetime: null // <-- NÂNG CẤP
 })
+// --- KẾT THÚC NÂNG CẤP ---
+
 const newImageFiles = ref([])
 
 const imageFiles = ref([])
@@ -425,6 +564,67 @@ let searchTargetForm = 'main';
 const cccdInputRef = ref(null);
 const isScanning = ref(false);
 
+// --- BẮT ĐẦU NÂNG CẤP: Logic cho DateTime Picker ---
+const proxyDate = ref(null)
+const proxyTime = ref(null)
+// searchTargetForm đã tồn tại, chúng ta sẽ tái sử dụng nó cho ('main' hoặc 'edit')
+
+// Computed để hiển thị ngày giờ trong FORM CHÍNH
+const formattedEstimatedDatetime = computed(() => {
+  if (!form.estimated_datetime) return null;
+  // new Date() có thể xử lý chuỗi ISO (VD: 2025-10-30T15:30:00)
+  const d = new Date(form.estimated_datetime);
+  // Định dạng lại theo chuẩn Việt Nam
+  return quasarDate.formatDate(d, 'DD/MM/YYYY HH:mm');
+});
+
+// Computed để hiển thị ngày giờ trong DIALOG SỬA
+const formattedEditEstimatedDatetime = computed(() => {
+  if (!editForm.estimated_datetime) return null;
+  const d = new Date(editForm.estimated_datetime);
+  return quasarDate.formatDate(d, 'DD/MM/YYYY HH:mm');
+});
+
+// Hàm mở popup và khởi tạo giá trị
+function openDateTimePickerProxy(target) {
+  searchTargetForm = target; // 'main' hoặc 'edit'
+  const source = target === 'main' ? form : editForm;
+  
+  let d;
+  if (source.estimated_datetime) {
+    // Nếu đã có giá trị, dùng giá trị đó
+    d = new Date(source.estimated_datetime);
+  } else {
+    // Nếu không có, đề xuất thời gian hiện tại + làm tròn 30 phút
+    d = new Date();
+    const minutes = d.getMinutes();
+    if (minutes < 30) {
+      d.setMinutes(30);
+    } else {
+      d.setMinutes(0);
+      d.setHours(d.getHours() + 1);
+    }
+    d.setSeconds(0);
+    d.setMilliseconds(0);
+  }
+  
+  // Set giá trị cho q-date và q-time
+  proxyDate.value = quasarDate.formatDate(d, 'YYYY-MM-DD');
+  proxyTime.value = quasarDate.formatDate(d, 'HH:mm');
+}
+
+// Hàm lưu giá trị từ popup về form
+function setEstimatedDatetime() {
+  const target = searchTargetForm === 'main' ? form : editForm;
+  if (proxyDate.value && proxyTime.value) {
+    // Kết hợp lại thành chuỗi ISO (Pydantic/SQLAlchemy chấp nhận định dạng này)
+    // VD: "2025-10-30T16:00:00"
+    target.estimated_datetime = `${proxyDate.value}T${proxyTime.value}:00`;
+  }
+}
+// --- KẾT THÚC NÂNG CẤP ---
+
+
 watch(isLongTerm, (newVal) => {
   if (newVal) {
     // Đăng ký dài hạn không hỗ trợ tải ảnh lên trực tiếp
@@ -432,6 +632,7 @@ watch(isLongTerm, (newVal) => {
   }
 });
 
+// --- BẮT ĐẦU NÂNG CẤP: Thay đổi cột 'Giờ dự kiến' thành 'Ngày & Giờ dự kiến' ---
 const columns = [
   { name: 'thumbnail', label: 'Ảnh', field: 'thumbnail', align: 'center' },
   { name: 'full_name', align: 'left', label: 'Họ tên', field: 'full_name', sortable: true },
@@ -439,12 +640,18 @@ const columns = [
   { name: 'supplier_name', align: 'left', label: 'Nhà cung cấp', field: 'supplier_name', sortable: true },
   { name: 'reason', align: 'left', label: 'Chi tiết', field: 'reason', sortable: true, style: 'max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' },
   { name: 'license_plate', align: 'left', label: 'Biển số', field: 'license_plate', sortable: true },
+  
+  // --- NÂNG CẤP ---
+  { name: 'estimated_datetime', align: 'left', label: 'Ngày & Giờ dự kiến', field: 'estimated_datetime', sortable: true },
+  // --- KẾT THÚC NÂNG CẤP ---
+  
   { name: 'registered_by_name', align: 'left', label: 'Người đăng ký', field: 'registered_by_name', sortable: true },
   { name: 'created_at', align: 'left', label: 'Ngày đăng ký', field: 'created_at', sortable: true, format: val => val ? new Date(val).toLocaleString('vi-VN') : '' },
   { name: 'status', align: 'center', label: 'Trạng thái', field: 'status', sortable: true },
   { name: 'check_in_time', align: 'left', label: 'Giờ vào', field: 'check_in_time', sortable: true, format: val => val ? new Date(val).toLocaleString('vi-VN') : '' },
   { name: 'actions', label: '', field: 'actions', align: 'right' }
 ]
+// --- KẾT THÚC NÂNG CẤP ---
 
 function triggerCccdInput() {
   cccdInputRef.value.click();
@@ -706,6 +913,11 @@ async function onSubmit() {
                     supplier_name: form.supplier_name,
                     full_name: guest.full_name,
                     id_card_number: guest.id_card_number,
+                    
+                    // --- BẮT ĐẦU NÂNG CẤP: Gửi estimated_datetime cho khách dài hạn ---
+                    estimated_datetime: form.estimated_datetime || null,
+                    // --- KẾT THÚC NÂNG CẤP ---
+
                     start_date: quasarDate.formatDate(quasarDate.extractDate(longTermDates.from, 'YYYY/MM/DD'), 'YYYY-MM-DD'),
                     end_date: quasarDate.formatDate(quasarDate.extractDate(longTermDates.to, 'YYYY/MM/DD'), 'YYYY-MM-DD'),
                 };
@@ -718,6 +930,7 @@ async function onSubmit() {
 
         } else { // Đăng ký thường (không dài hạn)
             if (isBulk.value) {
+                // form (từ initialFormState) đã chứa estimated_datetime
                 const bulkResponse = await api.post('/guests/bulk', form);
                 const createdGuests = bulkResponse.data;
                 if (!createdGuests || createdGuests.length === 0) throw new Error("Không tạo được bản ghi khách.");
@@ -725,6 +938,7 @@ async function onSubmit() {
             } else {
                 const payload = { ...form };
                 delete payload.guests;
+                // payload (từ initialFormState) đã chứa estimated_datetime
                 const guestResponse = await api.post('/guests', payload);
                 await uploadImagesForGuests([guestResponse.data]);
             }
@@ -762,17 +976,21 @@ async function uploadImagesForGuests(guests) {
     }
 }
 
+// --- BẮT ĐẦU NÂNG CẤP: Reset cả estimated_datetime ---
 function resetForm() {
     Object.assign(form, { ...initialFormState, guests: [{ full_name: '', id_card_number: '' }] });
+    form.estimated_datetime = null; // <-- NÂNG CẤP
     imageFiles.value = [];
     isBulk.value = false;
     isLongTerm.value = false;
     longTermDates.from = '';
     longTermDates.to = '';
 }
+// --- KẾT THÚC NÂNG CẤP ---
 
 
 function editRow(row) {
+    // Đảm bảo sao chép sâu (deep copy) để tránh ảnh hưởng row gốc
     Object.assign(editForm, JSON.parse(JSON.stringify(row)));
     newImageFiles.value = [];
     showEditDialog.value = true;
@@ -803,6 +1021,9 @@ async function onUpdateSubmit() {
     $q.loading.show({ message: 'Đang cập nhật...' });
     try {
         editForm.supplier_name = editForm.supplier_name || editForm.company;
+        
+        // editForm (từ editForm definition) đã chứa estimated_datetime
+        // Hàm openDateTimePickerProxy/setEstimatedDatetime đã cập nhật nó
         await api.put(`/guests/${editForm.id}`, editForm);
 
         if (newImageFiles.value && newImageFiles.value.length > 0) {
@@ -915,4 +1136,3 @@ onMounted(() => {
   loadSuggestions()
 })
 </script>
-
