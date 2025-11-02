@@ -885,7 +885,31 @@ async function loadSuggestions() {
 
 async function onSubmit() {
     isSubmitting.value = true;
+
     try {
+        // --- BẮT ĐẦU THAY ĐỔI: Kiểm tra bắt buộc cho Ngày & Giờ dự kiến ---
+        const estimatedDt = form.estimated_datetime;
+
+        // Bắt các trường hợp: 
+        // 1. null/undefined (trạng thái khởi tạo/clear)
+        // 2. Chuỗi rỗng hoặc chỉ chứa khoảng trắng
+        // 3. Chuỗi không phải là ISO 8601 hợp lệ (ví dụ: "Invalid Date" hoặc chuỗi không mong muốn)
+        
+        const isValidDateString = estimatedDt 
+            && typeof estimatedDt === 'string' 
+            && estimatedDt.trim().length > 0 
+            && quasarDate.isValid(estimatedDt); // Kiểm tra xem chuỗi có phải là ngày hợp lệ không
+
+        if (!isValidDateString) {
+             $q.notify({ 
+                 type: 'negative', 
+                 message: 'Vui lòng nhập "Ngày & Giờ dự kiến" để tiếp tục đăng ký.' 
+             });
+             isSubmitting.value = false;
+             return; // Hủy lệnh đăng ký
+        }
+        // --- KẾT THÚC THAY ĐỔI ---
+        
         let successMessage = 'Đăng ký thành công!';
         
         if (isLongTerm.value) {
@@ -914,9 +938,8 @@ async function onSubmit() {
                     full_name: guest.full_name,
                     id_card_number: guest.id_card_number,
                     
-                    // --- BẮT ĐẦU NÂNG CẤP: Gửi estimated_datetime cho khách dài hạn ---
+                    // Gửi estimated_datetime cho khách dài hạn
                     estimated_datetime: form.estimated_datetime || null,
-                    // --- KẾT THÚC NÂNG CẤP ---
 
                     start_date: quasarDate.formatDate(quasarDate.extractDate(longTermDates.from, 'YYYY/MM/DD'), 'YYYY-MM-DD'),
                     end_date: quasarDate.formatDate(quasarDate.extractDate(longTermDates.to, 'YYYY/MM/DD'), 'YYYY-MM-DD'),
@@ -930,7 +953,6 @@ async function onSubmit() {
 
         } else { // Đăng ký thường (không dài hạn)
             if (isBulk.value) {
-                // form (từ initialFormState) đã chứa estimated_datetime
                 const bulkResponse = await api.post('/guests/bulk', form);
                 const createdGuests = bulkResponse.data;
                 if (!createdGuests || createdGuests.length === 0) throw new Error("Không tạo được bản ghi khách.");
@@ -938,7 +960,6 @@ async function onSubmit() {
             } else {
                 const payload = { ...form };
                 delete payload.guests;
-                // payload (từ initialFormState) đã chứa estimated_datetime
                 const guestResponse = await api.post('/guests', payload);
                 await uploadImagesForGuests([guestResponse.data]);
             }
@@ -955,6 +976,7 @@ async function onSubmit() {
         isSubmitting.value = false
     }
 }
+
 
 async function uploadImagesForGuests(guests) {
     if (imageFiles.value && imageFiles.value.length > 0) {
