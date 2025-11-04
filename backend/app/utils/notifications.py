@@ -5,6 +5,7 @@ import os
 import requests
 import logging
 import pytz # --- THÊM MỚI: Cần cho múi giờ ---
+from datetime import timedelta # --- THÊM MỚI (V3): Cần để "ép" trừ giờ ---
 from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload # Thêm joinedload
 
@@ -119,22 +120,43 @@ def format_pending_list_for_telegram(pending_guests: List[models.Guest]) -> str:
         supplier = (guest.supplier_name or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         plate = (guest.license_plate or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         
-        # --- NÂNG CẤP: Lấy và escape Ngày giờ dự kiến ---
+        # --- SỬA LỖI (V3): "Ép" trừ 7 giờ theo yêu cầu ---
         estimated_datetime_str = "N/A"
         if guest.estimated_datetime:
             try:
-                # Chuyển đổi sang múi giờ local (TZ) trước khi format
-                local_dt = guest.estimated_datetime.astimezone(pytz.timezone(settings.TZ))
-                estimated_datetime_str = local_dt.strftime("%d/%m %H:%M") # Format: 30/10 09:30
-            except Exception:
-                 # Fallback nếu datetime không có thông tin múi giờ
+                # KỊCH BẢN 1: Giả định datetime từ DB là "naive" và là giờ LOCAL (ví dụ: 14:00)
+                # nhưng nó đang bị hiểu lầm là UTC (14:00 UTC).
+                # Ta cần "ép" nó về đúng UTC (07:00 UTC) bằng cách trừ 7 giờ.
+                
+                # 1. Lấy múi giờ UTC và múi giờ Local
+                utc_tz = pytz.utc
+                local_tz = pytz.timezone(settings.TZ)
+                
+                # 2. "Ép" trừ 7 giờ
+                corrected_utc_naive_time = guest.estimated_datetime - timedelta(hours=7)
+
+                # 3. "Áp" múi giờ UTC cho datetime "naive" đã sửa
+                aware_utc_dt = utc_tz.localize(corrected_utc_naive_time)
+                
+                # 4. Chuyển đổi sang múi giờ local
+                local_dt = aware_utc_dt.astimezone(local_tz)
+                
+                estimated_datetime_str = local_dt.strftime("%d/%m %H:%M") # Format: 30/10 14:00
+
+            except Exception as e:
+                # KỊCH BẢN 2: "localize" thất bại, có thể vì datetime đã "aware" (có TZ).
+                # Đây là trường hợp phổ biến của PostgreSQL.
+                # Thử chuyển đổi trực tiếp.
                 try:
-                    estimated_datetime_str = guest.estimated_datetime.strftime("%d/%m %H:%M")
-                except Exception:
-                     estimated_datetime_str = str(guest.estimated_datetime) # Fallback cuối cùng
+                    local_dt = guest.estimated_datetime.astimezone(pytz.timezone(settings.TZ))
+                    estimated_datetime_str = local_dt.strftime("%d/%m %H:%M")
+                except Exception as e2:
+                    # Fallback cuối cùng nếu cả hai đều thất bại
+                    logger.warning(f"Không thể chuyển đổi múi giờ cho estimated_datetime (ID khách: {guest.id}). Lỗi 1: {e}, Lỗi 2: {e2}")
+                    estimated_datetime_str = str(guest.estimated_datetime)
         
         estimated_datetime_str = estimated_datetime_str.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        # --- KẾT THÚC NÂNG CẤP ---
+        # --- KẾT THÚC SỬA LỖI (V3) ---
 
         # Lấy tên người đăng ký trực tiếp nếu có joinload
         registered_by_name = guest.registered_by.full_name if guest.registered_by else "Không rõ"
@@ -142,9 +164,9 @@ def format_pending_list_for_telegram(pending_guests: List[models.Guest]) -> str:
 
         lines.append("--------------------")
         lines.append(f"{i} - <b>{full_name}</b> - {id_card}")
-        # --- NÂNG CẤP: Hiển thị Ngày giờ dự kiến ---
+        # --- SỬA LỖI: Hiển thị Ngày giờ dự kiến ---
         lines.append(f"   Dự kiến: {estimated_datetime_str}")
-        # --- KẾT THÚC NÂNG CẤP ---
+        # --- KẾT THÚC SỬA LỖI ---
         lines.append(f"   BKS: {plate}")
         lines.append(f"   NCC: {supplier}")
         lines.append(f"   Người ĐK: {registered_by_name}") # Thêm tên người đăng ký
@@ -191,22 +213,43 @@ def format_event_for_archive(guest: models.Guest, event_type: str, user_who_trig
     supplier = (guest.supplier_name or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
     reason = (guest.reason or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
-    # --- NÂNG CẤP: Lấy và escape Ngày giờ dự kiến ---
+    # --- SỬA LỖI (V3): "Ép" trừ 7 giờ theo yêu cầu ---
     estimated_datetime_str = "N/A"
     if guest.estimated_datetime:
         try:
-            # Chuyển đổi sang múi giờ local (TZ) trước khi format
-            local_dt = guest.estimated_datetime.astimezone(pytz.timezone(settings.TZ))
-            estimated_datetime_str = local_dt.strftime("%d/%m %H:%M") # Format: 30/10 09:30
-        except Exception:
-             # Fallback nếu datetime không có thông tin múi giờ
+            # KỊCH BẢN 1: Giả định datetime từ DB là "naive" và là giờ LOCAL (ví dụ: 14:00)
+            # nhưng nó đang bị hiểu lầm là UTC (14:00 UTC).
+            # Ta cần "ép" nó về đúng UTC (07:00 UTC) bằng cách trừ 7 giờ.
+            
+            # 1. Lấy múi giờ UTC và múi giờ Local
+            utc_tz = pytz.utc
+            local_tz = pytz.timezone(settings.TZ)
+            
+            # 2. "Ép" trừ 7 giờ
+            corrected_utc_naive_time = guest.estimated_datetime - timedelta(hours=7)
+
+            # 3. "Áp" múi giờ UTC cho datetime "naive" đã sửa
+            aware_utc_dt = utc_tz.localize(corrected_utc_naive_time)
+            
+            # 4. Chuyển đổi sang múi giờ local
+            local_dt = aware_utc_dt.astimezone(local_tz)
+            
+            estimated_datetime_str = local_dt.strftime("%d/%m %H:%M") # Format: 30/10 14:00
+
+        except Exception as e:
+            # KỊCH BẢN 2: "localize" thất bại, có thể vì datetime đã "aware" (có TZ).
+            # Đây là trường hợp phổ biến của PostgreSQL.
+            # Thử chuyển đổi trực tiếp.
             try:
-                estimated_datetime_str = guest.estimated_datetime.strftime("%d/%m %H:%M")
-            except Exception:
-                 estimated_datetime_str = str(guest.estimated_datetime) # Fallback cuối cùng
+                local_dt = guest.estimated_datetime.astimezone(pytz.timezone(settings.TZ))
+                estimated_datetime_str = local_dt.strftime("%d/%m %H:%M")
+            except Exception as e2:
+                # Fallback cuối cùng nếu cả hai đều thất bại
+                logger.warning(f"Không thể chuyển đổi múi giờ cho estimated_datetime (ID khách: {guest.id}). Lỗi 1: {e}, Lỗi 2: {e2}")
+                estimated_datetime_str = str(guest.estimated_datetime)
     
     estimated_datetime_str = estimated_datetime_str.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    # --- KẾT THÚC NÂNG CẤP ---
+    # --- KẾT THÚC SỬA LỖI (V3) ---
 
     # Lấy tên người đăng ký gốc (luôn cần)
     # guest.registered_by đã được joinedload trong send_event_to_archive_background
@@ -222,9 +265,9 @@ def format_event_for_archive(guest: models.Guest, event_type: str, user_who_trig
         f"{event_icon} <b>[SỰ KIỆN] {event_title}</b>",
         "", # Dòng trống
         f"👤 <b>Khách:</b> {full_name} ({id_card})",
-        # --- NÂNG CẤP: Hiển thị Ngày giờ dự kiến ---
+        # --- SỬA LỖI: Hiển thị Ngày giờ dự kiến ---
         f"⏰ <b>Dự kiến:</b> {estimated_datetime_str}",
-        # --- KẾT THÚC NÂNG CẤP ---
+        # --- KẾT THÚC SỬA LỖI ---
         f"📝 <b>Người ĐK:</b> {registered_by_original}",
         f"🚗 <b>BKS:</b> {plate}",
         f"💼 <b>Đơn vị:</b> {supplier}",
@@ -332,4 +375,5 @@ def run_pending_list_notification():
     finally:
         db.close()
     logger.info("Hoàn tất tác vụ cập nhật kênh chính.")
+
 
