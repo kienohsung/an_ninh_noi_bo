@@ -219,8 +219,29 @@ const pendingColumns = [
 
 const checkedInColumns = [
     ...baseColumns,
-    // Thêm cột giờ vào cho bảng đã check-in
-    { name: 'check_in_time', align: 'left', label: 'Giờ vào', field: 'check_in_time', sortable: true, format: val => val ? new Date(val).toLocaleString('vi-VN') : '' },
+    // Thêm cột giờ vào cho bảng đã check-in (ĐÃ SỬA LỖI +7 GIỜ)
+    { 
+      name: 'check_in_time', 
+      align: 'left', 
+      label: 'Giờ vào', 
+      field: 'check_in_time', 
+      sortable: true, 
+      format: (val) => {
+        if (!val) return '';
+        try {
+          // Lấy thời gian từ CSDL (đang bị hiểu là giờ local, ví dụ 3:00)
+          const dbDate = new Date(val);
+          
+          // Cộng thêm 7 giờ để hiển thị đúng (ví dụ 10:00)
+          dbDate.setHours(dbDate.getHours() + 7);
+          
+          // Hiển thị thời gian đã cộng theo định dạng Việt Nam
+          return dbDate.toLocaleString('vi-VN');
+        } catch (e) {
+          return val; // Trả về giá trị gốc nếu có lỗi
+        }
+      } 
+    },
 ];
 
 

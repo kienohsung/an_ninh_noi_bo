@@ -648,7 +648,28 @@ const columns = [
   { name: 'registered_by_name', align: 'left', label: 'Người đăng ký', field: 'registered_by_name', sortable: true },
   { name: 'created_at', align: 'left', label: 'Ngày đăng ký', field: 'created_at', sortable: true, format: val => val ? new Date(val).toLocaleString('vi-VN') : '' },
   { name: 'status', align: 'center', label: 'Trạng thái', field: 'status', sortable: true },
-  { name: 'check_in_time', align: 'left', label: 'Giờ vào', field: 'check_in_time', sortable: true, format: val => val ? new Date(val).toLocaleString('vi-VN') : '' },
+  { 
+    name: 'check_in_time', 
+    align: 'left', 
+    label: 'Giờ vào', 
+    field: 'check_in_time', 
+    sortable: true, 
+    format: (val) => {
+      if (!val) return '';
+      try {
+        // Lấy thời gian từ CSDL (đang bị hiểu là giờ local, ví dụ 3:00)
+        const dbDate = new Date(val);
+        
+        // Cộng thêm 7 giờ để hiển thị đúng (ví dụ 10:00)
+        dbDate.setHours(dbDate.getHours() + 7);
+        
+        // Hiển thị thời gian đã cộng theo định dạng Việt Nam
+        return dbDate.toLocaleString('vi-VN');
+      } catch (e) {
+        return val; // Trả về giá trị gốc nếu có lỗi
+      }
+    } 
+  },
   { name: 'actions', label: '', field: 'actions', align: 'right' }
 ]
 // --- KẾT THÚC NÂNG CẤP ---
