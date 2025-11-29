@@ -38,6 +38,7 @@ from .routers.long_term_guests import router as long_term_guests_router
 from .routers.vehicle_log import router as vehicle_log_router
 from .routers.guests_confirm import router as guests_confirm_router
 from .routers.assets import router as assets_router
+from .routers.admin import router as admin_router
 
 app = FastAPI(
     title="Ứng dụng an ninh nội bộ - Local Security App",
@@ -76,6 +77,7 @@ app.include_router(vehicle_log_router)
 app.include_router(guests_confirm_router)
 app.include_router(admin_telegram_router)
 app.include_router(assets_router)
+app.include_router(admin_router)
 
 # Mount static files
 app.mount(f"/{os.path.basename(settings.UPLOAD_DIR)}", StaticFiles(directory=settings.UPLOAD_DIR), name="static")

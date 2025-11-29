@@ -518,6 +518,8 @@ import api from '../api'
 import { useAuthStore } from '../stores/auth'
 // Import image upload utilities
 import { resizeImage, uploadMultipleImages } from '../utils/imageUpload'
+// Import validators
+import { validateEstimatedDateTime, validateGuestArray, validateDateRange } from '../utils/validators'
 
 const $q = useQuasar()
 const auth = useAuthStore()
@@ -818,28 +820,15 @@ async function onSubmit() {
     isSubmitting.value = true;
 
     try {
-        // --- BẮT ĐẦU THAY ĐỔI: Kiểm tra bắt buộc cho Ngày & Giờ dự kiến ---
-        const estimatedDt = form.estimated_datetime;
-
-        // Bắt các trường hợp: 
-        // 1. null/undefined (trạng thái khởi tạo/clear)
-        // 2. Chuỗi rỗng hoặc chỉ chứa khoảng trắng
-        // 3. Chuỗi không phải là ISO 8601 hợp lệ (ví dụ: "Invalid Date" hoặc chuỗi không mong muốn)
-        
-        const isValidDateString = estimatedDt 
-            && typeof estimatedDt === 'string' 
-            && estimatedDt.trim().length > 0 
-            && quasarDate.isValid(estimatedDt); // Kiểm tra xem chuỗi có phải là ngày hợp lệ không
-
-        if (!isValidDateString) {
+        // Validate estimated datetime using utility
+        if (!validateEstimatedDateTime(form.estimated_datetime)) {
              $q.notify({ 
                  type: 'negative', 
                  message: 'Vui lòng nhập "Ngày & Giờ dự kiến" để tiếp tục đăng ký.' 
              });
              isSubmitting.value = false;
-             return; // Hủy lệnh đăng ký
+             return;
         }
-        // --- KẾT THÚC THAY ĐỔI ---
         
         let successMessage = 'Đăng ký thành công!';
         
@@ -1050,16 +1039,20 @@ function clearData() {
     cancel: true,
     persistent: true
   }).onOk(async (password) => {
-    if (password === 'Kienhp@@123') {
-      try {
+    try {
+      // Validate password với backend
+      const validation = await api.post('/admin/validate-delete-password', { password })
+      
+      if (validation.data.valid) {
         await api.post('/guests/clear')
         $q.notify({ type: 'positive', message: 'Đã xóa toàn bộ dữ liệu khách.' })
         load()
-      } catch (error) {
-        $q.notify({ type: 'negative', message: 'Xóa dữ liệu thất bại.' })
+      } else {
+        $q.notify({ type: 'negative', message: 'Sai mật khẩu.' })
       }
-    } else {
-      $q.notify({ type: 'negative', message: 'Sai mật khẩu.' })
+    } catch (error) {
+      const message = error.response?.status === 401 ? 'Sai mật khẩu.' : 'Xóa dữ liệu thất bại.'
+      $q.notify({ type: 'negative', message })
     }
   })
 }
@@ -1075,24 +1068,32 @@ function deleteOldData() {
     cancel: true,
     persistent: true
   }).onOk(async (password) => {
-    if (password === 'Kienhp@@123') {
-      $q.loading.show({ message: 'Đang xóa dữ liệu cũ...' })
-      try {
-        const response = await api.post('/guests/delete-old')
-        const deletedCount = response.data?.deleted_count || 0
-        $q.notify({ 
-          type: 'positive', 
-          message: response.data?.message || `Đã xóa ${deletedCount} khách đăng ký cũ.` 
-        })
-        load()
-      } catch (error) {
-        const detail = error.response?.data?.detail || 'Xóa dữ liệu thất bại.'
-        $q.notify({ type: 'negative', message: detail })
-      } finally {
+    $q.loading.show({ message: 'Đang xác thực...' })
+    
+    try {
+      // Validate password với backend
+      const validation = await api.post('/admin/validate-delete-password', { password })
+      
+      if (!validation.data.valid) {
         $q.loading.hide()
+        $q.notify({ type: 'negative', message: 'Sai mật khẩu.' })
+        return
       }
-    } else {
-      $q.notify({ type: 'negative', message: 'Sai mật khẩu.' })
+      
+      // Password valid, proceed with delete
+      $q.loading.show({ message: 'Đang xóa dữ liệu cũ...' })
+      const response = await api.post('/guests/delete-old')
+      const deletedCount = response.data?.deleted_count || 0
+      $q.notify({ 
+        type: 'positive', 
+        message: response.data?.message || `Đã xóa ${deletedCount} khách đăng ký cũ.` 
+      })
+      load()
+    } catch (error) {
+      const detail = error.response?.data?.detail || 'Xóa dữ liệu thất bại.'
+      $q.notify({ type: 'negative', message: detail })
+    } finally {
+      $q.loading.hide()
     }
   })
 }
