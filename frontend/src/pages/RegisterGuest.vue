@@ -236,6 +236,10 @@
                 <q-item-section avatar><q-icon name="download" /></q-item-section>
                 <q-item-section>Export Excel</q-item-section>
               </q-item>
+              <q-item clickable v-close-popup @click="deleteOldData" v-if="isAdmin">
+                <q-item-section avatar><q-icon name="delete_sweep" /></q-item-section>
+                <q-item-section>Xóa dữ liệu cũ</q-item-section>
+              </q-item>
             </q-list>
           </q-btn-dropdown>
           <q-btn label="Xóa dữ liệu" color="negative" @click="clearData" v-if="isAdmin" />
@@ -1167,6 +1171,39 @@ function clearData() {
         load()
       } catch (error) {
         $q.notify({ type: 'negative', message: 'Xóa dữ liệu thất bại.' })
+      }
+    } else {
+      $q.notify({ type: 'negative', message: 'Sai mật khẩu.' })
+    }
+  })
+}
+
+function deleteOldData() {
+  $q.dialog({
+    title: 'Xác nhận xóa DỮ LIỆU CŨ',
+    message: 'Xóa các khách đăng ký cũ (pending, đã đăng ký và dự kiến vào trước hôm nay). Vui lòng nhập mật khẩu để xác nhận:',
+    prompt: {
+      model: '',
+      type: 'password'
+    },
+    cancel: true,
+    persistent: true
+  }).onOk(async (password) => {
+    if (password === 'Kienhp@@123') {
+      $q.loading.show({ message: 'Đang xóa dữ liệu cũ...' })
+      try {
+        const response = await api.post('/guests/delete-old')
+        const deletedCount = response.data?.deleted_count || 0
+        $q.notify({ 
+          type: 'positive', 
+          message: response.data?.message || `Đã xóa ${deletedCount} khách đăng ký cũ.` 
+        })
+        load()
+      } catch (error) {
+        const detail = error.response?.data?.detail || 'Xóa dữ liệu thất bại.'
+        $q.notify({ type: 'negative', message: detail })
+      } finally {
+        $q.loading.hide()
       }
     } else {
       $q.notify({ type: 'negative', message: 'Sai mật khẩu.' })

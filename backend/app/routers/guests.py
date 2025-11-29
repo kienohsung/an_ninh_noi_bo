@@ -523,3 +523,43 @@ def clear_guests(db: Session = Depends(get_db)):
         logger.error(f"Lỗi khi xóa dữ liệu khách: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Xóa dữ liệu thất bại: {e}")
 
+@router.post("/delete-old", dependencies=[Depends(require_roles("admin"))])
+def delete_old_pending_guests(db: Session = Depends(get_db)):
+    """
+    Xóa các khách đăng ký cũ với điều kiện:
+    - Trạng thái: pending (chờ vào)
+    - Ngày đăng ký (created_at) từ ngày hôm qua hoặc cũ hơn
+    - Ngày vào dự kiến (estimated_datetime) từ ngày hôm qua hoặc cũ hơn
+    """
+    try:
+        # Lấy thời điểm bắt đầu của ngày hôm nay (00:00:00)
+        tz = pytz.timezone(settings.TZ)
+        today_start = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Tìm tất cả khách thỏa mãn điều kiện
+        old_guests = db.query(models.Guest).filter(
+            models.Guest.status == "pending",
+            models.Guest.created_at < today_start,
+            models.Guest.estimated_datetime < today_start
+        ).options(joinedload(models.Guest.images)).all()
+        
+        if not old_guests:
+            return {"ok": True, "message": "Không có dữ liệu cũ để xóa.", "deleted_count": 0}
+        
+        # Lưu trữ ảnh trước khi xóa
+        deleted_count = 0
+        for guest in old_guests:
+            for image in guest.images:
+                _archive_image(image.image_path)
+            db.delete(guest)
+            deleted_count += 1
+        
+        db.commit()
+        logger.info(f"Đã xóa {deleted_count} khách đăng ký cũ (pending, created < today, estimated < today)")
+        return {"ok": True, "message": f"Đã xóa {deleted_count} khách đăng ký cũ.", "deleted_count": deleted_count}
+    
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Lỗi khi xóa dữ liệu khách cũ: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Xóa dữ liệu thất bại: {e}")
+

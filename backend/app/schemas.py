@@ -81,6 +81,41 @@ class GuestReadWithUser(GuestRead):
     registered_by_name: Optional[str] = None
     images: List[GuestImageRead] = []
 
+# === CHECKLIST 1.4: Tạo Pydantic schemas cho AssetLog ===
+class AssetImageRead(BaseModel):
+    id: int
+    image_path: str
+    model_config = ConfigDict(from_attributes=True)
+
+class AssetLogBase(BaseModel):
+    destination: str
+    description_reason: str  # Required field - no default value
+    quantity: int
+    department: str  # <<< FIX: Thêm trường bộ phận
+    expected_return_date: Optional[date] = None
+
+class AssetLogCreate(AssetLogBase):
+    pass
+
+class AssetLogDisplay(AssetLogBase):
+    id: int
+    # department: str # (Đã kế thừa từ AssetLogBase)
+    status: str
+    created_at: datetime
+    check_out_time: Optional[datetime] = None
+    check_in_back_time: Optional[datetime] = None
+    
+    # Thông tin lồng ghép từ user
+    registered_by: UserRead
+    check_out_by: Optional[UserRead] = None
+    check_in_back_by: Optional[UserRead] = None
+    
+    # Images
+    images: List[AssetImageRead] = []
+    
+    model_config = ConfigDict(from_attributes=True)
+# === KẾT THÚC CHECKLIST 1.4 ===
+
 class GuestSuggestions(BaseModel):
     companies: List[str]
     license_plates: List[str]
@@ -173,4 +208,3 @@ class LongTermGuestRead(LongTermGuestBase):
 # SỬA LỖI: Thêm schema LongTermGuestReadWithUser
 class LongTermGuestReadWithUser(LongTermGuestRead):
     registered_by_name: Optional[str] = None
-

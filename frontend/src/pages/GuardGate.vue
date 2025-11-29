@@ -82,6 +82,70 @@
       </q-table>
     </q-card>
 
+    <!-- === CHECKLIST 3.4, 3.6, 3.7, 3.8, 3.10: Bảng Hàng Chờ Ra === -->
+    <q-card class="q-mb-lg">
+      <q-card-section class="bg-warning text-black">
+        <div class="text-subtitle1 text-bold">Hàng Chờ Ra ({{ assetsPendingOut.length }})</div>
+      </q-card-section>
+      <q-separator />
+      <q-table
+        :rows="assetsPendingOut"
+        :columns="assetsPendingColumns"
+        row-key="id"
+        flat
+        :pagination="{ rowsPerPage: 10 }"
+        :loading="loading"
+        dense
+      >
+        <template #body-cell-actions="props">
+          <q-td :props="props">
+            <!-- (Checklist 3.8) Màu 'warning' (Cam) -->
+            <!-- (Checklist 3.10) Gọi hàm 'confirmAssetCheckOut' -->
+            <q-btn color="warning" text-color="black" icon="arrow_circle_up" label="Xác nhận ra" @click="confirmAssetCheckOut(props.row)" dense/>
+          </q-td>
+        </template>
+        <template #no-data>
+            <div class="full-width row flex-center text-grey-7 q-gutter-sm q-pa-md">
+                <q-icon size="2em" name="inventory_2" />
+                <span>Không có tài sản nào chờ ra.</span>
+            </div>
+        </template>
+      </q-table>
+    </q-card>
+    <!-- === KẾT THÚC CHECKLIST 3.4 === -->
+
+    <!-- === CHECKLIST 3.5, 3.6, 3.7, 3.9, 3.11: Bảng Hàng Đã Ra (Chờ Về) === -->
+    <q-card class="q-mb-lg">
+      <q-card-section class="bg-info text-white">
+        <div class="text-subtitle1 text-bold">Hàng Đã Ra - Chờ Về ({{ assetsCheckedOut.length }})</div>
+      </q-card-section>
+      <q-separator />
+      <q-table
+        :rows="assetsCheckedOut"
+        :columns="assetsCheckedInColumns"
+        row-key="id"
+        flat
+        :pagination="{ rowsPerPage: 10 }"
+        :loading="loading"
+        dense
+      >
+        <template #body-cell-actions="props">
+          <q-td :props="props">
+            <!-- (Checklist 3.9) Màu 'info' (Xanh dương) -->
+            <!-- (Checklist 3.11) Gọi hàm 'confirmAssetReturn' -->
+            <q-btn color="info" icon="arrow_circle_down" label="Xác nhận về" @click="confirmAssetReturn(props.row)" dense/>
+          </q-td>
+        </template>
+        <template #no-data>
+            <div class="full-width row flex-center text-grey-7 q-gutter-sm q-pa-md">
+                <q-icon size="2em" name="check_circle" />
+                <span>Không có tài sản nào đang ở bên ngoài.</span>
+            </div>
+        </template>
+      </q-table>
+    </q-card>
+    <!-- === KẾT THÚC CHECKLIST 3.5 === -->
+
     <!-- Bảng: Khách đã vào trong ngày -->
      <q-card>
        <q-card-section class="bg-blue-grey-8 text-white">
@@ -123,9 +187,21 @@ import { useQuasar, date as quasarDate } from 'quasar'
 // KẾT THÚC NÂNG CẤP
 import api from '../api'
 import { useAuthStore } from '../stores/auth'
+// === CHECKLIST 4.6 (Phần 1): Import thêm các hàm PWA cho Tài sản ===
+// === KẾT THÚC CHECKLIST 4.6 (Phần 1) ===
+
 // PWA Imports (giữ nguyên)
-import { getGuestsSnapshot, saveGuestsSnapshot, enqueueConfirm, drainQueue } from '../pwa/db/guard-gate-db'
+
 import { registerServiceWorker } from '../register-sw'
+// SỬA LỖI: Gộp tất cả import PWA vào 1 khối duy nhất
+import { 
+  getGuestsSnapshot, 
+  saveGuestsSnapshot, 
+  enqueueConfirm,
+  drainQueue, 
+  enqueueAssetCheckOut,
+  enqueueAssetReturn
+} from '../pwa/db/guard-gate-db'
 
 const $q = useQuasar()
 const auth = useAuthStore()
@@ -133,6 +209,10 @@ const loading = ref(false)
 
 const pending = ref([])
 const checkedIn = ref([])
+// === CHECKLIST 3.2: Thêm 2 ref mới cho tài sản ===
+const assetsPendingOut = ref([])
+const assetsCheckedOut = ref([])
+// === KẾT THÚC CHECKLIST 3.2 ===
 const q = ref('')
 let timer = null
 
@@ -243,12 +323,43 @@ const checkedInColumns = [
       } 
     },
 ];
+// === CHECKLIST 3.6, 3.7: Định nghĩa cột cho bảng Tài sản ===
+const assetBaseColumns = [
+  { name: 'full_name', label: 'Người ĐK', field: row => row.registered_by.full_name, align: 'left', sortable: true },
+  { name: 'department', label: 'Bộ phận', field: 'department', align: 'left', sortable: true },
+  { name: 'destination', label: 'Nơi đến', field: 'destination', align: 'left', sortable: true },
+  // (Checklist 3.6) Sửa style để mô tả có thể xuống dòng
+  { name: 'description_reason', label: 'Mô tả', field: 'description_reason', align: 'left', style: 'max-width: 200px; white-space: normal;' },
+  { name: 'quantity', label: 'SL', field: 'quantity', align: 'center', sortable: true }, // (Checklist 3.7)
+  { name: 'expected_return_date', label: 'Dự kiến về', field: 'expected_return_date', align: 'left', sortable: true, format: val => val ? quasarDate.formatDate(val, 'DD/MM/YYYY') : 'Không về' },
+];
+const assetsPendingColumns = [
+  { name: 'actions', label: 'Hành động', align: 'left', style: 'width: 150px' },
+  ...assetBaseColumns
+];
+const assetsCheckedInColumns = [
+  { name: 'actions', label: 'Hành động', align: 'left', style: 'width: 150px' },
+  ...assetBaseColumns,
+  { 
+    name: 'check_out_time', 
+    label: 'Giờ ra', 
+    field: 'check_out_time', 
+    align: 'left', 
+    sortable: true, 
+    // Sửa lỗi +7 giờ (nếu cần) bằng cách dùng toLocaleString
+    format: val => val ? new Date(val).toLocaleString('vi-VN') : '' 
+  },
+];
+// === KẾT THÚC CHECKLIST 3.6, 3.7 ===
 
+
+// Chỉ cần thêm đoạn code này vào hàm load() trong GuardGate.vue
 
 async function load () {
   loading.value = true;
   const userId = auth.user?.id || 'anon'
   try {
+    // 1. Load guests (giữ nguyên)
     const res = await api.get('/guests', { params: { q: q.value || undefined, status: 'pending,checked_in' } })
     const rows = res.data || []
     
@@ -261,21 +372,36 @@ async function load () {
     pending.value = rows.filter(r => r.status === 'pending')
     checkedIn.value = rows.filter(r => r.status === 'checked_in')
 
-    // Lưu cache PWA (giữ nguyên)
+    // === FIX: THÊM LOGIC LOAD ASSETS ===
+    // 2. Load assets từ endpoint guard-gate
+    const assetsRes = await api.get('/assets/guard-gate', { params: { q: q.value || undefined } })
+    const assetsRows = assetsRes.data || []
+    
+    assetsPendingOut.value = assetsRows.filter(r => r.status === 'pending_out')
+    assetsCheckedOut.value = assetsRows.filter(r => r.status === 'checked_out')
+    // === KẾT THÚC FIX ===
+
+    // Lưu cache PWA
     const plainPending = JSON.parse(JSON.stringify(pending.value));
     const plainCheckedIn = JSON.parse(JSON.stringify(checkedIn.value));
-    await saveGuestsSnapshot(userId, { pending: plainPending, checkedIn: plainCheckedIn });
+    const plainAssetsPending = JSON.parse(JSON.stringify(assetsPendingOut.value));
+    const plainAssetsChecked = JSON.parse(JSON.stringify(assetsCheckedOut.value));
+    
+    await saveGuestsSnapshot(userId, { 
+      pending: plainPending, 
+      checkedIn: plainCheckedIn,
+      assetsPending: plainAssetsPending,
+      assetsChecked: plainAssetsChecked
+    });
 
     cachedAt.value = new Date().toISOString()
     offline.value = false
 
   } catch (error) {
     if (error.name !== 'DexieError') {
-      // BẮT ĐẦU SỬA LỖI: Sửa $q-notify thành $q.notify
-      $q.notify({type: 'negative', message: 'Không tải được danh sách khách.'})
-      // KẾT THÚC SỬA LỖI
+      $q.notify({type: 'negative', message: 'Không tải được danh sách khách/tài sản.'})
     }
-    console.error("Failed to load guests", error)
+    console.error("Failed to load data", error)
     offline.value = true
   } finally {
     loading.value = false;
@@ -317,15 +443,109 @@ async function confirmIn (row) {
   }
 }
 
-// --- PWA Function (giữ nguyên) ---
+// === CHECKLIST 3.10: Hàm Xác nhận Tài sản RA ===
+async function confirmAssetCheckOut(row) {
+  // === CHECKLIST 4.6 (Phần 2): Logic PWA Offline ===
+  if (!navigator.onLine) {
+    try {
+      await enqueueAssetCheckOut(row.id); // <--- Gọi hàm PWA mới
+      $q.notify({ type:'warning', message: 'Đã xếp hàng (offline) xác nhận TÀI SẢN RA.'});
+      
+      // Cập nhật UI (Optimistic Update)
+      const index = assetsPendingOut.value.findIndex(p => p.id === row.id);
+      if (index > -1) {
+          const [confirmedAsset] = assetsPendingOut.value.splice(index, 1);
+          confirmedAsset.status = 'checked_out'; // Cập nhật trạng thái
+          assetsCheckedOut.value.unshift(confirmedAsset); // Thêm vào bảng "Chờ Về"
+      }
+      // Đăng ký Background Sync
+      const registration = await navigator.serviceWorker.ready;
+      await registration.sync.register('sync-confirm'); 
+    } catch(e){
+      console.error('Lỗi xếp hàng (enqueue) confirmAssetCheckOut:', e);
+      $q.notify({ type: 'negative', message: 'Lỗi khi xếp hàng offline.' });
+    }
+    return;
+  }
+  // === KẾT THÚC CHECKLIST 4.6 (Phần 2) ===
+
+  // === FIX (TASK 2): Xóa bỏ đoạn code offline lặp lại (dead code) ===
+  // if (!navigator.onLine) {
+  //   $q.notify({ type:'warning', message: 'Chức năng offline cho tài sản chưa được hỗ trợ. Vui lòng kết nối mạng.'})
+  //   return;
+  // }
+  // === KẾT THÚC FIX ===
+
+  try {
+    // Gọi API đã tạo ở Giai đoạn 1 (Checklist 1.9)
+    await api.post(`/assets/${row.id}/checkout`);
+    $q.notify({ type: 'positive', message: `Đã xác nhận tài sản [${row.description_reason}] RA.` });
+    load(); // Tải lại toàn bộ dữ liệu
+  } catch (error) {
+    $q.notify({ type: 'negative', message: error.response?.data?.detail || 'Xác nhận thất bại.' });
+  }
+}
+// === KẾT THÚC CHECKLIST 3.10 ===
+
+// === CHECKLIST 3.11 & 4.6 (Phần 3): Cập nhật hàm Xác nhận Tài sản VỀ (Hỗ trợ Offline) ===
+async function confirmAssetReturn(row) {
+  // === CHECKLIST 4.6 (Phần 3): Logic PWA Offline ===
+  if (!navigator.onLine) {
+    try {
+      await enqueueAssetReturn(row.id); // <--- Gọi hàm PWA mới
+      $q.notify({ type:'warning', message: 'Đã xếp hàng (offline) xác nhận TÀI SẢN VỀ.'});
+      
+      // Cập nhật UI (Optimistic Update)
+      const index = assetsCheckedOut.value.findIndex(p => p.id === row.id);
+      if (index > -1) {
+          assetsCheckedOut.value.splice(index, 1); // Xóa khỏi bảng "Chờ Về"
+      }
+      // Đăng ký Background Sync
+      const registration = await navigator.serviceWorker.ready;
+      await registration.sync.register('sync-confirm'); 
+    } catch(e){
+      console.error('Lỗi xếp hàng (enqueue) confirmAssetReturn:', e);
+      $q.notify({ type: 'negative', message: 'Lỗi khi xếp hàng offline.' });
+    }
+    return;
+  }
+  // === KẾT THÚC CHECKLIST 4.6 (Phần 3) ===
+  
+  // Logic Online (giữ nguyên)
+  try {
+    // Gọi API đã tạo ở Giai đoạn 1 (Checklist 1.10)
+    await api.post(`/assets/${row.id}/checkin-back`);
+    $q.notify({ type: 'info', message: `Đã xác nhận tài sản [${row.description_reason}] VỀ.` });
+    load(); // Tải lại toàn bộ dữ liệu
+  } catch (error) {
+    $q.notify({ type: 'negative', message: error.response?.data?.detail || 'Xác nhận thất bại.' });
+  }
+}
+// === KẾT THÚC CHECKLIST 3.11 & 4.6 (Phần 3) ===
+
+
+// --- PWA Function ---
+// === CHECKLIST 4.6 (Phần 4): Cập nhật flushQueue để xử lý Tài sản ===
 async function flushQueue() {
   await drainQueue(async (item) => {
     if (item.type === 'confirmIn') {
-      await api.post(`/guests/${item.payload.guestId}/confirm-in`)
+      await api.post(`/guests/${item.payload.guestId}/confirm-in`);
     }
-  })
-  await load()
+    // Thêm logic mới
+    if (item.type === 'ASSET_CHECKOUT') {
+      await api.post(`/assets/${item.payload.assetId}/checkout`);
+    }
+    if (item.type === 'ASSET_RETURN') {
+      await api.post(`/assets/${item.payload.assetId}/checkin-back`);
+    }
+  });
+  
+  // Chỉ load lại khi online để tránh lỗi
+  if (navigator.onLine) {
+    await load();
+  }
 }
+// === KẾT THÚC CHECKLIST 4.6 (Phần 4) ===
 
 // --- Lifecycle hooks (giữ nguyên) ---
 onMounted(async () => {
@@ -338,6 +558,10 @@ onMounted(async () => {
   if (snap?.data) {
     pending.value = snap.data.pending || []
     checkedIn.value = snap.data.checkedIn || []
+    // === CHECKLIST 4.4: Tải assets từ PWA cache ===
+    assetsPendingOut.value = snap.data.assetsPending || []
+    assetsCheckedOut.value = snap.data.assetsChecked || []
+    // === KẾT THÚC CHECKLIST 4.4 ===
     cachedAt.value = snap.cachedAt
     offline.value = !navigator.onLine
   }
@@ -384,4 +608,3 @@ onBeforeUnmount(() => {
 }
 </style>
 <!-- KẾT THÚC NÂNG CẤP -->
-

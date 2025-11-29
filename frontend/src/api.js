@@ -3,17 +3,20 @@ import axios from 'axios'
 
 const backendHost = window.location.hostname;
 
-const backendPort = window.location.port === '5174' ? '8001' : '8000';
+const devPorts = ['5173', '5174', '5175']; // Danh sách các port dev có thể
+const backendPort = devPorts.includes(window.location.port) ? '8001' : '8000';
 
 const backendUrl = `http://${backendHost}:${backendPort}`;
 
-console.log('Connecting to backend at:', backendUrl); 
+console.log('Connecting to backend at:', backendUrl);
 
 const api = axios.create({ baseURL: backendUrl });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
-  if (token) config.headers.Authorization = `Bearer ${token}`
+  if (token && token !== 'null' && token !== 'undefined') {
+    config.headers.Authorization = `Bearer ${token}`
+  }
   return config
 })
 
@@ -40,10 +43,10 @@ api.interceptors.response.use(
 
     // Chỉ xử lý lỗi 401 và không phải là yêu cầu thử lại
     if (error.response?.status === 401 && !originalRequest._retry) {
-      
+
       if (isRefreshing) {
         // Nếu đang có một yêu cầu làm mới token khác chạy, đưa yêu cầu này vào hàng đợi
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
           failedQueue.push({ resolve, reject });
         }).then(token => {
           originalRequest.headers['Authorization'] = 'Bearer ' + token;
@@ -55,27 +58,28 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       const refreshToken = localStorage.getItem('refreshToken');
-      if (!refreshToken) {
+      if (!refreshToken || refreshToken === 'null' || refreshToken === 'undefined') {
         // Không có refresh token, không thể làm mới, buộc đăng xuất
         localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
         window.location.href = '/login';
         return Promise.reject(error);
       }
-      
+
       try {
         const { data } = await api.post('/token/refresh', { refresh_token: refreshToken });
-        
+
         // Cập nhật token mới vào localStorage
         localStorage.setItem('token', data.access_token);
         localStorage.setItem('refreshToken', data.refresh_token);
-        
+
         // Cập nhật header mặc định và header cho yêu cầu hiện tại
         api.defaults.headers.common['Authorization'] = 'Bearer ' + data.access_token;
         originalRequest.headers['Authorization'] = 'Bearer ' + data.access_token;
-        
+
         // Thực thi lại các yêu cầu đã thất bại trong hàng đợi
         processQueue(null, data.access_token);
-        
+
         // Thực thi lại yêu cầu ban đầu
         return api(originalRequest);
 

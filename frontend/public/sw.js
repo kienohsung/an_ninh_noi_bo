@@ -1,13 +1,32 @@
 // File: frontend/public/sw.js
-const CACHE_NAME = 'guardgate-cache-v1';
+const CACHE_NAME = 'guardgate-cache-v2'; // Bumped version to force cache refresh
 const API_MATCH = /\/guests(\?|$)/;
+
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(caches.open(CACHE_NAME));
 });
+
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    (async () => {
+      // Claim all clients immediately
+      await self.clients.claim();
+      
+      // Delete old cache versions
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames.map(cacheName => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })()
+  );
 });
+
 // Notify clients helper
 async function broadcast(type, payload) {
   const clients = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
@@ -15,6 +34,7 @@ async function broadcast(type, payload) {
     client.postMessage({ type, payload });
   }
 }
+
 // Cache GET /guests with network-first + fallback to cache
 self.addEventListener('fetch', (event) => {
   const { request } = event;
@@ -35,6 +55,7 @@ self.addEventListener('fetch', (event) => {
     })());
   }
 });
+
 // Background Sync: just ping clients to flush their queues
 self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-confirm') {

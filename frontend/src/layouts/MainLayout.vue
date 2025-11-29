@@ -29,6 +29,21 @@
           <q-item-section avatar><q-icon name="event_repeat"/></q-item-section>
           <q-item-section>Khách dài hạn</q-item-section>
         </q-item>
+        <!-- === CHECKLIST 2.10: Thêm 2 link menu Tài sản === -->
+        <q-separator v-if="['admin','manager','staff'].includes(auth.user?.role)" />
+
+        <q-item v-if="['admin','manager','staff'].includes(auth.user?.role)" clickable v-ripple to="/register-asset">
+          <q-item-section avatar><q-icon name="outbox"/></q-item-section>
+          <q-item-section>Đăng ký Tài sản</q-item-section>
+        </q-item>
+
+        <q-item v-if="['admin','manager','staff'].includes(auth.user?.role)" clickable v-ripple to="/asset-management">
+          <q-item-section avatar><q-icon name="inventory"/></q-item-section>
+          <q-item-section>Quản lý Tài sản</q-item-section>
+        </q-item>
+
+        <q-separator />
+        <!-- === KẾT THÚC CHECKLIST 2.10 === -->
 
         <q-item v-if="['admin','guard'].includes(auth.user?.role)" clickable v-ripple to="/guard-gate">
           <q-item-section avatar><q-icon name="login"/></q-item-section>

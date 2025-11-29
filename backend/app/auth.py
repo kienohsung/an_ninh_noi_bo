@@ -38,6 +38,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
         expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    import logging
+    logging.info(f"Token created. Alg: {settings.ALGORITHM}, KeyPrefix: {settings.SECRET_KEY[:3]}...")
     return encoded_jwt
 
 # === HÀM MỚI: TẠO REFRESH TOKEN ===
@@ -93,11 +95,15 @@ def refresh_access_token(payload: schemas.TokenRefreshRequest, db: Session = Dep
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
+        import logging
+        logging.info(f"Validating refresh token. Alg: {settings.ALGORITHM}, KeyPrefix: {settings.SECRET_KEY[:3]}...")
         decoded_payload = jwt.decode(payload.refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         username: str = decoded_payload.get("sub")
         if username is None:
             raise credentials_exception
-    except JWTError:
+    except JWTError as e:
+        import logging
+        logging.error(f"JWT Validation Error during refresh: {e}")
         raise credentials_exception
     
     user = db.query(models.User).filter(models.User.username == username).first()
@@ -132,6 +138,8 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
+        import logging
+        logging.info(f"Validating token. Alg: {settings.ALGORITHM}, KeyPrefix: {settings.SECRET_KEY[:3]}...")
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
