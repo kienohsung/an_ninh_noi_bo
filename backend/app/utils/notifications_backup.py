@@ -4,8 +4,6 @@ from __future__ import annotations
 import os
 import requests
 import logging
-import pytz # --- THÊM MỚI: Cần cho múi giờ ---
-from datetime import timedelta # --- THÊM MỚI (V3): Cần để "ép" trừ giờ ---
 from typing import List, Optional
 from sqlalchemy.orm import Session, joinedload # Thêm joinedload
 
@@ -119,54 +117,12 @@ def format_pending_list_for_telegram(pending_guests: List[models.Guest]) -> str:
         id_card = (guest.id_card_number or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         supplier = (guest.supplier_name or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         plate = (guest.license_plate or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        
-        # --- SỬA LỖI (V3): "Ép" trừ 7 giờ theo yêu cầu ---
-        estimated_datetime_str = "N/A"
-        if guest.estimated_datetime:
-            try:
-                # KỊCH BẢN 1: Giả định datetime từ DB là "naive" và là giờ LOCAL (ví dụ: 14:00)
-                # nhưng nó đang bị hiểu lầm là UTC (14:00 UTC).
-                # Ta cần "ép" nó về đúng UTC (07:00 UTC) bằng cách trừ 7 giờ.
-                
-                # 1. Lấy múi giờ UTC và múi giờ Local
-                utc_tz = pytz.utc
-                local_tz = pytz.timezone(settings.TZ)
-                
-                # 2. "Ép" trừ 7 giờ
-                corrected_utc_naive_time = guest.estimated_datetime - timedelta(hours=7)
-
-                # 3. "Áp" múi giờ UTC cho datetime "naive" đã sửa
-                aware_utc_dt = utc_tz.localize(corrected_utc_naive_time)
-                
-                # 4. Chuyển đổi sang múi giờ local
-                local_dt = aware_utc_dt.astimezone(local_tz)
-                
-                estimated_datetime_str = local_dt.strftime("%d/%m %H:%M") # Format: 30/10 14:00
-
-            except Exception as e:
-                # KỊCH BẢN 2: "localize" thất bại, có thể vì datetime đã "aware" (có TZ).
-                # Đây là trường hợp phổ biến của PostgreSQL.
-                # Thử chuyển đổi trực tiếp.
-                try:
-                    local_dt = guest.estimated_datetime.astimezone(pytz.timezone(settings.TZ))
-                    estimated_datetime_str = local_dt.strftime("%d/%m %H:%M")
-                except Exception as e2:
-                    # Fallback cuối cùng nếu cả hai đều thất bại
-                    logger.warning(f"Không thể chuyển đổi múi giờ cho estimated_datetime (ID khách: {guest.id}). Lỗi 1: {e}, Lỗi 2: {e2}")
-                    estimated_datetime_str = str(guest.estimated_datetime)
-        
-        estimated_datetime_str = estimated_datetime_str.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        # --- KẾT THÚC SỬA LỖI (V3) ---
-
         # Lấy tên người đăng ký trực tiếp nếu có joinload
         registered_by_name = guest.registered_by.full_name if guest.registered_by else "Không rõ"
         registered_by_name = registered_by_name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
         lines.append("--------------------")
         lines.append(f"{i} - <b>{full_name}</b> - {id_card}")
-        # --- SỬA LỖI: Hiển thị Ngày giờ dự kiến ---
-        lines.append(f"   Dự kiến: {estimated_datetime_str}")
-        # --- KẾT THÚC SỬA LỖI ---
         lines.append(f"   BKS: {plate}")
         lines.append(f"   NCC: {supplier}")
         lines.append(f"   Người ĐK: {registered_by_name}") # Thêm tên người đăng ký
@@ -213,44 +169,6 @@ def format_event_for_archive(guest: models.Guest, event_type: str, user_who_trig
     supplier = (guest.supplier_name or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
     reason = (guest.reason or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
-    # --- SỬA LỖI (V3): "Ép" trừ 7 giờ theo yêu cầu ---
-    estimated_datetime_str = "N/A"
-    if guest.estimated_datetime:
-        try:
-            # KỊCH BẢN 1: Giả định datetime từ DB là "naive" và là giờ LOCAL (ví dụ: 14:00)
-            # nhưng nó đang bị hiểu lầm là UTC (14:00 UTC).
-            # Ta cần "ép" nó về đúng UTC (07:00 UTC) bằng cách trừ 7 giờ.
-            
-            # 1. Lấy múi giờ UTC và múi giờ Local
-            utc_tz = pytz.utc
-            local_tz = pytz.timezone(settings.TZ)
-            
-            # 2. "Ép" trừ 7 giờ
-            corrected_utc_naive_time = guest.estimated_datetime - timedelta(hours=7)
-
-            # 3. "Áp" múi giờ UTC cho datetime "naive" đã sửa
-            aware_utc_dt = utc_tz.localize(corrected_utc_naive_time)
-            
-            # 4. Chuyển đổi sang múi giờ local
-            local_dt = aware_utc_dt.astimezone(local_tz)
-            
-            estimated_datetime_str = local_dt.strftime("%d/%m %H:%M") # Format: 30/10 14:00
-
-        except Exception as e:
-            # KỊCH BẢN 2: "localize" thất bại, có thể vì datetime đã "aware" (có TZ).
-            # Đây là trường hợp phổ biến của PostgreSQL.
-            # Thử chuyển đổi trực tiếp.
-            try:
-                local_dt = guest.estimated_datetime.astimezone(pytz.timezone(settings.TZ))
-                estimated_datetime_str = local_dt.strftime("%d/%m %H:%M")
-            except Exception as e2:
-                # Fallback cuối cùng nếu cả hai đều thất bại
-                logger.warning(f"Không thể chuyển đổi múi giờ cho estimated_datetime (ID khách: {guest.id}). Lỗi 1: {e}, Lỗi 2: {e2}")
-                estimated_datetime_str = str(guest.estimated_datetime)
-    
-    estimated_datetime_str = estimated_datetime_str.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    # --- KẾT THÚC SỬA LỖI (V3) ---
-
     # Lấy tên người đăng ký gốc (luôn cần)
     # guest.registered_by đã được joinedload trong send_event_to_archive_background
     registered_by_original = "Không rõ"
@@ -265,9 +183,6 @@ def format_event_for_archive(guest: models.Guest, event_type: str, user_who_trig
         f"{event_icon} <b>[SỰ KIỆN] {event_title}</b>",
         "", # Dòng trống
         f"👤 <b>Khách:</b> {full_name} ({id_card})",
-        # --- SỬA LỖI: Hiển thị Ngày giờ dự kiến ---
-        f"⏰ <b>Dự kiến:</b> {estimated_datetime_str}",
-        # --- KẾT THÚC SỬA LỖI ---
         f"📝 <b>Người ĐK:</b> {registered_by_original}",
         f"🚗 <b>BKS:</b> {plate}",
         f"💼 <b>Đơn vị:</b> {supplier}",
@@ -375,131 +290,4 @@ def run_pending_list_notification():
     finally:
         db.close()
     logger.info("Hoàn tất tác vụ cập nhật kênh chính.")
-
-
-# === CẢI TIẾN 4: Telegram Notifications cho Assets ===
-
-def format_asset_event_for_archive(
-    asset: models.AssetLog,
-    event_type: str,
-    user_who_triggered: models.User
-) -> str:
-    """
-    Định dạng sự kiện tài sản cho kênh lưu trữ Telegram.
-    
-    Args:
-        asset: AssetLog object
-        event_type: "Đăng ký tài sản mới", "Xác nhận ra cổng", "Xác nhận vào cổng"
-        user_who_triggered: User who triggered the event
-        
-    Returns:
-        Formatted HTML message string
-    """
-    # 1. Event title và icon
-    if event_type == "Đăng ký tài sản mới":
-        event_title = "TÀI SẢN MỚI ĐĂNG KÝ"
-        event_icon = "📦"
-    elif event_type == "Xác nhận ra cổng":
-        event_title = "TÀI SẢN ĐÃ RA CỔNG"
-        event_icon = "📤"
-    elif event_type == "Xác nhận vào cổng":
-        event_title = "TÀI SẢN ĐÃ VÀO LẠI"
-        event_icon = "📥"
-    else:
-        event_title = event_type.upper()
-        event_icon = "ℹ️"
-    
-    # 2. Thời gian
-    now_short = get_local_time().strftime('%H:%M %d/%m/%Y')
-    
-    # 3. Escape HTML
-    full_name = (asset.full_name or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    employee_code = (asset.employee_code or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    asset_desc = (asset.asset_description or asset.description_reason or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    destination = (asset.destination or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    department = (asset.department or 'N/A').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    quantity = str(asset.quantity) if asset.quantity else "1"
-    
-    # 4. Người đăng ký
-    registered_by = "Không rõ"
-    if asset.registered_by:
-        registered_by = asset.registered_by.full_name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    
-    # Người thực hiện sự kiện
-    triggered_by = user_who_triggered.full_name.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    
-    # 5. Build message
-    lines = [
-        f"{event_icon} <b>[SỰ KIỆN] {event_title}</b>",
-        "",
-        f"👤 <b>Người mang:</b> {full_name} (MNV: {employee_code})",
-        f"🏢 <b>Bộ phận:</b> {department}",
-        f"📦 <b>Tài sản:</b> {asset_desc}",
-        f"📊 <b>Số lượng:</b> {quantity}",
-        f"📍 <b>Chuyển đến:</b> {destination}",
-        f"📝 <b>Người ĐK:</b> {registered_by}",
-        ""
-    ]
-    
-    # 6. Dòng cuối
-    if event_type == "Đăng ký tài sản mới":
-        lines.append(f"Đăng ký bởi: {triggered_by} (lúc {now_short})")
-    elif event_type == "Xác nhận ra cổng":
-        lines.append(f"Xác nhận ra bởi: {triggered_by} (lúc {now_short})")
-    elif event_type == "Xác nhận vào cổng":
-        lines.append(f"Xác nhận vào bởi: {triggered_by} (lúc {now_short})")
-    
-    message = "\n".join(lines)
-    
-    # Telegram message limit
-    if len(message) > 4096:
-        message = message[:4090] + "\n..."
-    
-    return message
-
-
-def send_asset_event_to_archive_background(
-    asset_id: int,
-    event_type: str,
-    triggered_by_user_id: int
-):
-    """
-    Gửi sự kiện tài sản đến kênh lưu trữ (background task).
-    
-    Args:
-        asset_id: ID of the asset
-        event_type: Type of event
-        triggered_by_user_id: ID of user who triggered the event
-    """
-    if not can_send_archive():
-        logger.info("Bỏ qua gửi sự kiện tài sản: Kênh lưu trữ chưa cấu hình")
-        return
-    
-    logger.info(f"Gửi sự kiện tài sản '{event_type}' cho asset ID {asset_id}...")
-    
-    db: Session = SessionLocal()
-    try:
-        # Load asset với registered_by relationship
-        asset = db.query(models.AssetLog)\
-            .options(joinedload(models.AssetLog.registered_by))\
-            .filter(models.AssetLog.id == asset_id)\
-            .first()
-        
-        triggered_by_user = db.query(models.User).get(triggered_by_user_id)
-        
-        if not asset or not triggered_by_user:
-            logger.error(f"Không tìm thấy asset {asset_id} hoặc user {triggered_by_user_id}")
-            return
-        
-        message_text = format_asset_event_for_archive(asset, event_type, triggered_by_user)
-        send_telegram_message(message_text, TELEGRAM_ARCHIVE_CHAT_ID)
-        
-        logger.info(f"Đã gửi sự kiện tài sản '{event_type}' thành công")
-    
-    except Exception as e:
-        logger.error(f"Lỗi gửi sự kiện tài sản: {e}", exc_info=True)
-    finally:
-        db.close()
-
-# === KẾT THÚC CẢI TIẾN 4 ===
 

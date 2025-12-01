@@ -10,7 +10,7 @@ import os
 
 from .. import models, schemas
 from ..database import get_db
-from ..utils.notifications import send_telegram_message
+from ..utils.notifications import send_telegram_message, send_asset_event_to_archive_background  # CẢI TIẾN 4
 from ..auth import get_current_user
 from ..config import settings
 
@@ -34,6 +34,14 @@ async def create_asset(
     if current_user.role not in ["admin", "manager", "staff"]:
         raise HTTPException(status_code=403, detail="Không có quyền truy cập")
     
+    # === CẢI TIẾN 3: Validate estimated_datetime bắt buộc ===
+    if not asset_in.estimated_datetime:
+        raise HTTPException(
+            status_code=400,
+            detail="Ngày giờ dự kiến là bắt buộc"
+        )
+    # === KẾT THÚC CẢI TIẾN 3 ===
+    
     # Tạo bản ghi CSDL - explicitly map all fields to avoid schema mismatch
     db_asset = models.AssetLog(
         registered_by_user_id=current_user.id,
@@ -45,6 +53,7 @@ async def create_asset(
         asset_description=asset_in.description_reason,  # Map from description_reason
         quantity=asset_in.quantity,
         expected_return_date=asset_in.expected_return_date,
+        estimated_datetime=asset_in.estimated_datetime,  # CẢI TIẾN 3
         status=models.ASSET_STATUS_PENDING_OUT,
         created_at=models.get_local_time()
     )
@@ -66,6 +75,15 @@ async def create_asset(
         background_tasks.add_task(send_telegram_message, msg, "GUARD")
     except Exception as e:
         print(f"Telegram notification failed for new asset: {e}")
+    
+    # === CẢI TIẾN 4: Gửi thông báo đến kênh lưu trữ ===
+    background_tasks.add_task(
+        send_asset_event_to_archive_background,
+        db_asset.id,
+        "Đăng ký tài sản mới",
+        current_user.id
+    )
+    # === KẾT THÚC CẢI TIẾN 4 ===
     
     # Tải lại relationship để response
     db.refresh(db_asset, attribute_names=['registered_by'])
@@ -230,7 +248,7 @@ def get_assets(
     if current_user.role == 'staff':
         query = query.filter(models.AssetLog.registered_by_user_id == current_user.id)
 
-    results = db.scalars(query).all()
+    results = db.scalars(query).unique().all()
     return results
 
 # === ENDPOINT 3: [GET] /assets/guard-gate (Trang Bảo vệ) ===
@@ -271,7 +289,7 @@ def get_assets_for_guard_gate(
             )
         )
 
-    results = db.scalars(query).all()
+    results = db.scalars(query).unique().all()
     return results
 
 # === ENDPOINT 4: [POST] /assets/{asset_id}/checkout (Bảo vệ Xác nhận RA) ===
@@ -317,6 +335,15 @@ async def confirm_asset_checkout(
         background_tasks.add_task(send_telegram_message, msg, "MANAGER")
     except Exception as e:
         print(f"Telegram notification failed for asset checkout: {e}")
+    
+    # === CẢI TIẾN 4: Gửi thông báo đến kênh lưu trữ ===
+    background_tasks.add_task(
+        send_asset_event_to_archive_background,
+        db_asset.id,
+        "Xác nhận ra cổng",
+        current_user.id
+    )
+    # === KẾT THÚC CẢI TIẾN 4 ===
     
     db.refresh(db_asset, attribute_names=['registered_by', 'check_out_by'])
     return db_asset
@@ -365,5 +392,119 @@ async def confirm_asset_return(
     except Exception as e:
         print(f"Telegram notification failed for asset return: {e}")
     
+    # === CẢI TIẾN 4: Gửi thông báo đến kênh lưu trữ ===
+    background_tasks.add_task(
+        send_asset_event_to_archive_background,
+        db_asset.id,
+        "Xác nhận vào cổng",
+        current_user.id
+    )
+    # === KẾT THÚC CẢI TIẾN 4 ===
+    
     db.refresh(db_asset, attribute_names=['registered_by', 'check_in_back_by'])
     return db_asset
+
+
+# === CẢI TIẾN 2: Endpoints quản lý tài sản của staff ===
+
+@router.get("/my-assets", response_model=List[schemas.AssetLogDisplay])
+def get_my_assets(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Lấy danh sách tài sản đã đăng ký bởi user hiện tại.
+    Dành cho staff xem tài sản của mình.
+    """
+    # Query assets của user
+    query = (
+        select(models.AssetLog)
+        .options(joinedload(models.AssetLog.registered_by))
+        .options(joinedload(models.AssetLog.check_out_by))
+        .options(joinedload(models.AssetLog.check_in_back_by))
+        .options(joinedload(models.AssetLog.images))
+        .filter(models.AssetLog.registered_by_user_id == current_user.id)
+        .order_by(models.AssetLog.created_at.desc())
+    )
+    
+    results = db.scalars(query).unique().all()
+    return results
+
+
+@router.put("/{asset_id}", response_model=schemas.AssetLogDisplay)
+def update_asset(
+    asset_id: int,
+    asset_update: schemas.AssetLogUpdate,  # Cần schema update
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update asset - chỉ cho phép user sở hữu hoặc admin/manager.
+    Chỉ có thể sửa khi status = pending_out.
+    """
+    db_asset = db.get(models.AssetLog, asset_id)
+    
+    if not db_asset:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài sản")
+    
+    # Check permission
+    if current_user.role not in ['admin', 'manager']:
+        if db_asset.registered_by_user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Không có quyền sửa tài sản này")
+    
+    # Chỉ cho phép sửa khi còn pending, trừ khi là admin
+    if current_user.role != 'admin' and db_asset.status != models.ASSET_STATUS_PENDING_OUT:
+        raise HTTPException(
+            status_code=400, 
+            detail="Chỉ có thể sửa tài sản đang ở trạng thái chờ ra cổng"
+        )
+    
+    # Update fields
+    update_data = asset_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        if hasattr(db_asset, key):
+            setattr(db_asset, key, value)
+    
+    db.commit()
+    db.refresh(db_asset)
+    return db_asset
+
+
+@router.delete("/{asset_id}")
+def delete_asset(
+    asset_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete asset - chỉ cho phép user sở hữu hoặc admin/manager.
+    Chỉ có thể xóa khi status = pending_out.
+    """
+    db_asset = db.get(models.AssetLog, asset_id)
+    
+    if not db_asset:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài sản")
+    
+    # Check permission
+    if current_user.role not in ['admin', 'manager']:
+        if db_asset.registered_by_user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Không có quyền xóa tài sản này")
+    
+    # Only allow delete if status is pending_out, unless admin
+    if current_user.role != 'admin' and db_asset.status != models.ASSET_STATUS_PENDING_OUT:
+        raise HTTPException(
+            status_code=400, 
+            detail="Chỉ có thể xóa tài sản đang ở trạng thái chờ ra cổng"
+        )
+    
+    # Delete associated images first
+    for image in db_asset.images:
+        _archive_asset_image(image.image_path)
+        db.delete(image)
+    
+    db.delete(db_asset)
+    db.commit()
+    
+    return {"message": "Đã xóa tài sản thành công"}
+
+# === KẾT THÚC CẢI TIẾN 2 ===

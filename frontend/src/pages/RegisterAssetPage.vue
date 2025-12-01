@@ -1,4 +1,3 @@
-<!-- File path: frontend/src/pages/RegisterAssetPage.vue -->
 <template>
   <q-page padding>
     <q-card>
@@ -11,7 +10,7 @@
 
           <!-- Form đăng ký tài sản -->
           <div class="row q-col-gutter-md">
-            <div class="col-12 col-md-4">
+            <div class="col-12 col-md-6">
               <q-input 
                 :model-value="auth.user?.full_name" 
                 label="Họ tên NV" 
@@ -20,7 +19,7 @@
                 readonly 
               />
             </div>
-            <div class="col-12 col-md-4">
+            <div class="col-12 col-md-6">
               <q-input 
                 :model-value="auth.user?.username" 
                 label="Mã NV" 
@@ -29,8 +28,7 @@
                 readonly 
               />
             </div>
-            <!-- === FIX (TASK 4): Cho phép chỉnh sửa Bộ phận === -->
-            <div class="col-12 col-md-4">
+            <div class="col-12 col-md-6">
               <q-input 
                 v-model="form.department" 
                 label="Bộ phận" 
@@ -39,7 +37,6 @@
                 required
               />
             </div>
-            <!-- === KẾT THÚC FIX === -->
             
             <div class="col-12 col-md-6">
               <q-input 
@@ -51,7 +48,7 @@
               />
             </div>
             
-            <div class="col-12 col-md-3">
+            <div class="col-12 col-md-6">
               <q-input 
                 v-model.number="form.quantity" 
                 label="Số lượng" 
@@ -63,28 +60,35 @@
               />
             </div>
 
-             <div class="col-12 col-md-3">
-               <q-input 
-                v-model="form.expected_return_date" 
-                label="Ngày dự kiến hoàn trả" 
+            <!-- Cải tiến 3: Ngày dự kiến (Bỏ giờ) -->
+            <div class="col-12 col-md-6">
+              <q-input 
+                v-model="formattedEstimatedDatetime" 
+                label="Ngày dự kiến *" 
                 dense 
                 outlined 
-                mask="date" 
-                hint="Tùy chọn (để trống nếu không về)"
-                clearable
+                readonly 
+                required
+                :rules="[val => !!val || 'Vui lòng chọn ngày dự kiến']"
+                hint="Bắt buộc - Ngày dự kiến mang tài sản ra cổng"
               >
                 <template v-slot:append>
-                  <q-icon name="event" class="cursor-pointer">
+                  <q-icon name="event" class="cursor-pointer" @click="openDateTimePickerProxy">
                     <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                      <q-date v-model="form.expected_return_date">
-                        <div class="row items-center justify-end">
-                          <q-btn v-close-popup label="Đóng" color="primary" flat />
+                      <div class="q-pa-md" style="min-width: 300px">
+                        <div class="q-gutter-md">
+                          <q-date v-model="proxyDate" mask="YYYY-MM-DD" />
+                          <!-- Đã bỏ q-time -->
                         </div>
-                      </q-date>
+                        <div class="row items-center justify-end q-mt-md q-gutter-sm">
+                          <q-btn v-close-popup label="Bỏ qua" color="primary" flat />
+                          <q-btn v-close-popup label="OK" color="primary" @click="setEstimatedDatetime" />
+                        </div>
+                      </div>
                     </q-popup-proxy>
                   </q-icon>
                 </template>
-               </q-input>
+              </q-input>
             </div>
 
             <div class="col-12">
@@ -158,24 +162,20 @@ import { useAuthStore } from '../stores/auth'
 const $q = useQuasar()
 const auth = useAuthStore()
 
-// === FIX (TASK 4): Cập nhật logic form cho Bộ phận ===
-
-// 1. Tính toán giá trị bộ phận mặc định
 const departmentDisplay = computed(() => {
   if (auth.user?.department) return auth.user.department;
   if (auth.user?.full_name && auth.user.full_name.includes('-')) {
     return auth.user.full_name.split('-')[0].trim();
   }
-  return ''; // Trả về rỗng nếu không có
+  return '';
 })
 
-// 2. Thêm 'department' vào trạng thái form ban đầu
 const initialFormState = {
   destination: '',
   description_reason: '',
   quantity: 1,
-  expected_return_date: null,
-  department: departmentDisplay.value, // Gán giá trị mặc định
+  department: departmentDisplay.value,
+  estimated_datetime: null
 }
 
 const form = reactive({ ...initialFormState })
@@ -183,7 +183,30 @@ const isSubmitting = ref(false)
 const selectedImages = ref(null)
 const imagePreviews = ref([])
 
-// Watch for image selection changes to generate previews
+const proxyDate = ref(null)
+
+const formattedEstimatedDatetime = computed(() => {
+  if (!form.estimated_datetime) return null
+  return quasarDate.formatDate(new Date(form.estimated_datetime), 'DD/MM/YYYY')
+})
+
+function openDateTimePickerProxy() {
+  let d
+  if (form.estimated_datetime) {
+    d = new Date(form.estimated_datetime)
+  } else {
+    d = new Date()
+  }
+  proxyDate.value = quasarDate.formatDate(d, 'YYYY-MM-DD')
+}
+
+function setEstimatedDatetime() {
+  if (proxyDate.value) {
+    // Backend expects datetime, so we append 00:00:00
+    form.estimated_datetime = `${proxyDate.value}T00:00:00`
+  }
+}
+
 watch(selectedImages, (newFiles) => {
   imagePreviews.value = []
   if (newFiles && newFiles.length > 0) {
@@ -197,39 +220,35 @@ watch(selectedImages, (newFiles) => {
   }
 })
 
-// (Xóa computed 'departmentDisplay' cũ ở đây nếu có)
-
 async function onSubmit() {
   isSubmitting.value = true;
   try {
-    // Validate quantity
     if (!form.quantity || form.quantity <= 0) {
         $q.notify({ type: 'negative', message: 'Số lượng phải lớn hơn 0.' });
         isSubmitting.value = false;
         return;
     }
 
-    // Validate images
+    if (!form.estimated_datetime) {
+        $q.notify({ type: 'negative', message: 'Vui lòng chọn ngày dự kiến.' });
+        isSubmitting.value = false;
+        return;
+    }
+
     if (!selectedImages.value || selectedImages.value.length === 0) {
         $q.notify({ type: 'negative', message: 'Vui lòng chọn ít nhất 1 ảnh.' });
         isSubmitting.value = false;
         return;
     }
 
-    // Chuẩn bị payload
     const payload = {
-      ...form, // 'department' đã có trong form
-      // Chuyển đổi ngày (YYYY/MM/DD) sang (YYYY-MM-DD) cho backend
-      expected_return_date: form.expected_return_date 
-        ? quasarDate.formatDate(quasarDate.extractDate(form.expected_return_date, 'YYYY/MM/DD'), 'YYYY-MM-DD') 
-        : null
+      ...form,
+      estimated_datetime: form.estimated_datetime
     };
     
-    // Step 1: Create asset
     const response = await api.post('/assets', payload); 
     const assetId = response.data.id;
     
-    // Step 2: Upload images
     const uploadPromises = []
     for (const file of selectedImages.value) {
       const formData = new FormData()
@@ -257,8 +276,8 @@ async function onSubmit() {
 function resetForm() {
   Object.assign(form, initialFormState);
   form.quantity = 1;
-  form.expected_return_date = null;
-  form.department = departmentDisplay.value; // Reset lại bộ phận về mặc định
+  form.estimated_datetime = null;
+  form.department = departmentDisplay.value;
   selectedImages.value = null
   imagePreviews.value = []
 }

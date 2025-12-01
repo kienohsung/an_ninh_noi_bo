@@ -25,24 +25,9 @@
           />
         </div>
       </q-card-section>
-      <q-tabs
-        v-model="tab"
-        dense
-        class="text-grey"
-        active-color="primary"
-        indicator-color="primary"
-        align="justify"
-        narrow-indicator
-      >
-        <q-tab name="guests" label="Đăng ký khách" />
-        <q-tab name="assets" label="Tài sản của tôi" />
-      </q-tabs>
-
       <q-separator />
-
-      <q-tab-panels v-model="tab" animated>
-        <q-tab-panel name="guests">
-          <q-form @submit="onSubmit" class="q-gutter-y-md">
+      <q-card-section>
+        <q-form @submit="onSubmit" class="q-gutter-y-md">
 
           <!-- SỬA ĐỔI: Gom nhóm các tùy chọn đăng ký đặc biệt -->
           <div class="q-pa-sm bg-grey-2 rounded-borders">
@@ -90,7 +75,6 @@
           <!-- Form đăng ký theo đoàn -->
           <div v-if="isBulk">
             <div class="text-caption q-mb-sm">Nhập thông tin chung cho đoàn:</div>
-            <!-- THÊM MỚI: Bổ sung estimated_time, thay đổi grid thành md-4 -->
             <div class="row q-col-gutter-md">
               <div class="col-12 col-md-6">
                 <q-input v-model="form.supplier_name" label="Nhà cung cấp" dense outlined>
@@ -106,68 +90,22 @@
                   </template>
                 </q-input>
               </div>
-              
-              <!-- BẮT ĐẦU NÂNG CẤP: Thay thế input time bằng DateTime Picker (Form Đoàn) -->
-              <!-- === CẢI TIẾN 3: Làm datetime bắt buộc === -->
-              <div class="col-12 col-md-6">
-                <q-input 
-                  v-model="formattedEstimatedDatetime" 
-                  label="Ngày & Giờ dự kiến *" 
-                  dense 
-                  outlined 
-                  readonly 
-                  required
-                  :rules="[val => !!val || 'Vui lòng chọn ngày giờ dự kiến']"
-                  hint="Bắt buộc"
-                >
-                  <template v-slot:append>
-                    <!-- Thay đổi @click để gọi hàm chuẩn bị proxy -->
-                    <q-icon name="event" class="cursor-pointer" @click="openDateTimePickerProxy('main')">
-                      <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                        <div class="q-pa-md" style="min-width: 300px">
-                          <div class="q-gutter-md">
-                            <q-date v-model="proxyDate" mask="YYYY-MM-DD" />
-                            <q-time v-model="proxyTime" mask="HH:mm" format24h />
-                          </div>
-                          <div class="row items-center justify-end q-mt-md q-gutter-sm">
-                            <q-btn v-close-popup label="Bỏ qua" color="primary" flat />
-                            <q-btn v-close-popup label="OK" color="primary" @click="setEstimatedDatetime" />
-                          </div>
-                        </div>
-                      </q-popup-proxy>
-                    </q-icon>
-                  </template>
-                </q-input>
-              </div>
-              <!-- KẾT THÚC NÂNG CẤP -->
-
-              <div class="col-12 col-md-6"><q-input type="textarea" v-model="form.reason" label="Chi tiết / Lý do" outlined dense rows="1" /></div>
+              <div class="col-12"><q-input type="textarea" v-model="form.reason" label="Chi tiết" outlined dense /></div>
             </div>
             <q-separator class="q-my-md" />
             <div class="text-caption q-mb-sm">Thêm từng người trong đoàn:</div>
             <div v-for="(person, index) in form.guests" :key="index" class="row items-center q-col-gutter-sm q-mb-sm">
-              <div class="col-12 col-md-6"><q-input v-model="person.full_name" :label="`Họ tên người ${index + 1}`" dense outlined required /></div>
-              <div class="col-12 col-md-5"><q-input v-model="person.id_card_number" :label="`CCCD người ${index + 1}`" dense outlined /></div>
-              <div class="col-12 col-md-1 text-center"><q-btn flat dense icon="remove_circle" color="negative" @click="removePerson(index)" v-if="form.guests.length > 1" /></div>
+              <div class="col"><q-input v-model="person.full_name" :label="`Họ tên người ${index + 1}`" dense outlined required /></div>
+              <div class="col"><q-input v-model="person.id_card_number" :label="`CCCD người ${index + 1}`" dense outlined /></div>
+              <div class="col-auto"><q-btn flat dense icon="remove_circle" color="negative" @click="removePerson(index)" v-if="form.guests.length > 1" /></div>
             </div>
             <q-btn flat icon="add" label="Thêm người" @click="addPerson" />
           </div>
 
           <!-- Form đăng ký 1 người -->
-          <!-- THÊM MỚI: Bổ sung estimated_time, thay đổi grid thành md-4 -->
           <div v-else class="row q-col-gutter-md">
-            <div class="col-12 col-md-6"><q-input v-model="form.full_name" label="Họ tên *" dense outlined required /></div>
+            <div class="col-12 col-md-6"><q-input v-model="form.full_name" label="Họ tên" dense outlined required /></div>
             <div class="col-12 col-md-6"><q-input v-model="form.id_card_number" label="CCCD" dense outlined /></div>
-            
-            <div class="col-12 col-md-6"><q-input v-model="form.company" label="Công ty / Phòng ban" dense outlined /></div>
-            <div class="col-12 col-md-6">
-                 <q-input v-model="form.license_plate" label="Biển số" dense outlined>
-                  <template v-slot:append>
-                    <q-btn round dense flat icon="search" @click="openSearchDialog('plate', 'main')" />
-                  </template>
-                </q-input>
-            </div>
-
             <div class="col-12 col-md-6">
               <q-input v-model="form.supplier_name" label="Nhà cung cấp" dense outlined>
                 <template v-slot:append>
@@ -175,116 +113,39 @@
                 </template>
               </q-input>
             </div>
-            
-            <!-- BẮT ĐẦU NÂNG CẤP: Thay thế input time bằng DateTime Picker (Form 1 người) -->
-            <!-- === CẢI TIẾN 3: Làm datetime bắt buộc === -->
             <div class="col-12 col-md-6">
-               <q-input 
-                v-model="formattedEstimatedDatetime" 
-                label="Ngày & Giờ dự kiến *" 
-                dense 
-                outlined 
-                readonly 
-                required
-                :rules="[val => !!val || 'Vui lòng chọn ngày giờ dự kiến']"
-                hint="Bắt buộc"
-              >
+              <q-input v-model="form.license_plate" label="Biển số" dense outlined>
                 <template v-slot:append>
-                  <!-- Thay đổi @click để gọi hàm chuẩn bị proxy -->
-                  <q-icon name="event" class="cursor-pointer" @click="openDateTimePickerProxy('main')">
-                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                      <div class="q-pa-md" style="min-width: 300px">
-                        <div class="q-gutter-md">
-                          <q-date v-model="proxyDate" mask="YYYY-MM-DD" />
-                          <q-time v-model="proxyTime" mask="HH:mm" format24h />
-                        </div>
-                        <div class="row items-center justify-end q-mt-md q-gutter-sm">
-                          <q-btn v-close-popup label="Bỏ qua" color="primary" flat />
-                          <q-btn v-close-popup label="OK" color="primary" @click="setEstimatedDatetime" />
-                        </div>
-                      </div>
-                    </q-popup-proxy>
-                  </q-icon>
+                  <q-btn round dense flat icon="search" @click="openSearchDialog('plate', 'main')" />
                 </template>
-               </q-input>
+              </q-input>
             </div>
-            <!-- KẾT THÚC NÂNG CẤP -->
+            <div class="col-12"><q-input type="textarea" v-model="form.reason" label="Chi tiết" outlined dense /></div>
+          </div>
 
-            <div class="col-12">
-                <q-input v-model="form.reason" label="Lý do / Chi tiết" dense outlined />
-            </div>
-
-            <div class="col-12">
-              <q-file
-                v-model="imageFiles"
-                label="Chọn hình ảnh chân dung (tối đa 5 ảnh)"
-                multiple
-                accept="image/*"
-                dense
-                outlined
-                use-chips
-                clearable
-                @rejected="onFileRejected"
-                :max-files="5"
-                :disable="isLongTerm"
-              >
-                <template v-slot:prepend>
-                  <q-icon name="attach_file" />
-                </template>
-              </q-file>
-            </div>
+          <div class="col-12">
+            <q-file
+              v-model="imageFiles"
+              label="Chọn hình ảnh chân dung (tối đa 5 ảnh)"
+              multiple
+              accept="image/*"
+              dense
+              outlined
+              use-chips
+              clearable
+              @rejected="onFileRejected"
+              :max-files="5"
+              :disable="isLongTerm"
+            >
+              <template v-slot:prepend>
+                <q-icon name="attach_file" />
+              </template>
+            </q-file>
           </div>
 
           <div class="col-12"><q-btn type="submit" label="Đăng ký" color="primary" :loading="isSubmitting"/></div>
         </q-form>
-        </q-tab-panel>
-
-        <q-tab-panel name="assets">
-           <!-- CẢI TIẾN: Thêm thanh tìm kiếm và style giống bảng khách -->
-           <div class="row items-center justify-between q-mb-md">
-              <div class="text-subtitle1">Lịch sử đăng ký tài sản</div>
-              <div class="row items-center q-gutter-sm">
-                <q-input dense outlined v-model="assetSearch" placeholder="Tìm kiếm..." style="min-width: 280px" clearable>
-                  <template #append><q-icon name="search" /></template>
-                </q-input>
-              </div>
-           </div>
-
-           <q-table
-              :rows="filteredMyAssets"
-              :columns="assetColumns"
-              row-key="id"
-              :loading="isLoadingAssets"
-              flat
-              dense
-            >
-              <template v-slot:body-cell-status="props">
-                <q-td :props="props">
-                  <q-chip 
-                    :color="props.row.status === 'pending_out' ? 'warning' : (props.row.status === 'checked_out' ? 'info' : 'positive')" 
-                    text-color="white" 
-                    dense
-                  >
-                    {{ props.row.status === 'pending_out' ? 'Chờ ra' : (props.row.status === 'checked_out' ? 'Đã ra' : 'Đã về') }}
-                  </q-chip>
-                </q-td>
-              </template>
-              <template v-slot:body-cell-actions="props">
-                <q-td :props="props">
-                  <!-- Nút Sửa: Chỉ hiện khi chưa ra cổng -->
-                  <q-btn flat dense icon="edit" color="primary" @click.stop="openEditAssetDialog(props.row)" :disable="auth.user?.role !== 'admin' && props.row.status !== 'pending_out'">
-              <q-tooltip v-if="auth.user?.role === 'admin' || props.row.status === 'pending_out'">Sửa thông tin</q-tooltip>
-              <q-tooltip v-else>Chỉ sửa được khi chờ ra</q-tooltip>
-            </q-btn>
-            <q-btn flat dense icon="delete" color="negative" @click.stop="deleteAsset(props.row.id)" :disable="auth.user?.role !== 'admin' && props.row.status !== 'pending_out'">
-              <q-tooltip v-if="auth.user?.role === 'admin' || props.row.status === 'pending_out'">Xóa (Chỉ khi chưa ra cổng)</q-tooltip>
-              <q-tooltip v-else>Chỉ xóa được khi chờ ra</q-tooltip>
-            </q-btn>
-                </q-td>
-              </template>
-            </q-table>
-        </q-tab-panel>
-      </q-tab-panels>
+      </q-card-section>
     </q-card>
 
     <!-- PHẦN LỊCH SỬ GIỮ NGUYÊN -->
@@ -304,10 +165,6 @@
               <q-item clickable v-close-popup @click="exportGuests">
                 <q-item-section avatar><q-icon name="download" /></q-item-section>
                 <q-item-section>Export Excel</q-item-section>
-              </q-item>
-              <q-item clickable v-close-popup @click="deleteOldData" v-if="isAdmin">
-                <q-item-section avatar><q-icon name="delete_sweep" /></q-item-section>
-                <q-item-section>Xóa dữ liệu cũ</q-item-section>
               </q-item>
             </q-list>
           </q-btn-dropdown>
@@ -336,31 +193,10 @@
               </q-chip>
             </q-td>
           </template>
-          
-          <!-- BẮT ĐẦU NÂNG CẤP: Định dạng ô Ngày & Giờ dự kiến -->
-          <template #body-cell-estimated_datetime="props">
-            <q-td :props="props">
-              <q-chip 
-                v-if="props.value" 
-                icon="schedule" 
-                :label="quasarDate.formatDate(props.value, 'DD/MM HH:mm')" 
-                dense 
-                outline 
-                size="sm"
-                color="blue-grey" 
-              />
-            </q-td>
-          </template>
-          <!-- KẾT THÚC NÂNG CẤP -->
-
           <template #body-cell-actions="props">
             <q-td :props="props">
-              <q-btn flat dense icon="edit" @click.stop="editRow(props.row)" :disable="auth.user?.role === 'staff' && props.row.status !== 'pending'">
-                <q-tooltip v-if="auth.user?.role === 'staff' && props.row.status !== 'pending'">Không thể sửa khi khách đã vào</q-tooltip>
-              </q-btn>
-              <q-btn flat dense icon="delete" color="negative" @click.stop="delRow(props.row)" :disable="auth.user?.role === 'staff' && props.row.status !== 'pending'">
-                <q-tooltip v-if="auth.user?.role === 'staff' && props.row.status !== 'pending'">Không thể xóa khi khách đã vào</q-tooltip>
-              </q-btn>
+              <q-btn flat dense icon="edit" @click.stop="editRow(props.row)" />
+              <q-btn flat dense icon="delete" color="negative" @click.stop="delRow(props.row)" />
             </q-td>
           </template>
         </q-table>
@@ -378,38 +214,6 @@
           <q-form @submit="onUpdateSubmit" class="q-gutter-md">
             <q-input v-model="editForm.full_name" label="Họ tên" dense outlined required />
             <q-input v-model="editForm.id_card_number" label="CCCD" dense outlined />
-            
-            <!-- BẮT ĐẦU NÂNG CẤP: Thêm DateTime Picker vào Dialog Sửa -->
-            <q-input 
-              v-model="formattedEditEstimatedDatetime" 
-              label="Ngày & Giờ dự kiến" 
-              dense 
-              outlined 
-              readonly 
-              clearable 
-              @clear="editForm.estimated_datetime = null"
-              hint="Tùy chọn"
-            >
-              <template v-slot:append>
-                <!-- Thay đổi @click để gọi hàm chuẩn bị proxy (target 'edit') -->
-                <q-icon name="event" class="cursor-pointer" @click="openDateTimePickerProxy('edit')">
-                  <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                    <div class="q-pa-md" style="min-width: 300px">
-                      <div class="q-gutter-md">
-                        <q-date v-model="proxyDate" mask="YYYY-MM-DD" />
-                        <q-time v-model="proxyTime" mask="HH:mm" format24h />
-                      </div>
-                      <div class="row items-center justify-end q-mt-md q-gutter-sm">
-                        <q-btn v-close-popup label="Bỏ qua" color="primary" flat />
-                        <q-btn v-close-popup label="OK" color="primary" @click="setEstimatedDatetime" />
-                      </div>
-                    </div>
-                  </q-popup-proxy>
-                </q-icon>
-              </template>
-            </q-input>
-            <!-- KẾT THÚC NÂNG CẤP -->
-
              <q-input v-model="editForm.supplier_name" label="Nhà cung cấp" dense outlined>
                 <template v-slot:append>
                   <q-btn round dense flat icon="search" @click="openSearchDialog('supplier', 'edit')" />
@@ -466,56 +270,6 @@
       </q-card>
     </q-dialog>
 
-    <!-- DIALOG SỬA TÀI SẢN -->
-    <q-dialog v-model="showEditAssetDialog">
-      <q-card style="min-width: 500px">
-        <q-card-section>
-          <div class="text-h6">Cập nhật tài sản</div>
-        </q-card-section>
-
-        <q-card-section>
-          <q-form @submit="submitEditAsset" class="q-gutter-md">
-            <q-input v-model="editAssetForm.destination" label="Nơi đến" outlined dense required />
-            <q-input v-model.number="editAssetForm.quantity" label="Số lượng" type="number" outlined dense required />
-            
-            <!-- Ngày dự kiến (Edit) -->
-            <q-input 
-                v-model="formattedEditAssetDatetime" 
-                label="Ngày dự kiến *" 
-                dense 
-                outlined 
-                readonly 
-                required
-                :rules="[val => !!val || 'Vui lòng chọn ngày dự kiến']"
-              >
-                <template v-slot:append>
-                  <q-icon name="event" class="cursor-pointer" @click="openDateTimePickerProxy('edit_asset')">
-                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                      <div class="q-pa-md" style="min-width: 300px">
-                        <div class="q-gutter-md">
-                          <q-date v-model="proxyDate" mask="YYYY-MM-DD" />
-                        </div>
-                        <div class="row items-center justify-end q-mt-md q-gutter-sm">
-                          <q-btn v-close-popup label="Bỏ qua" color="primary" flat />
-                          <q-btn v-close-popup label="OK" color="primary" @click="setEstimatedDatetime" />
-                        </div>
-                      </div>
-                    </q-popup-proxy>
-                  </q-icon>
-                </template>
-            </q-input>
-
-            <q-input v-model="editAssetForm.description_reason" label="Mô tả / Lý do" type="textarea" outlined dense required />
-            
-            <div class="row justify-end q-gutter-sm">
-              <q-btn label="Hủy" flat v-close-popup />
-              <q-btn label="Cập nhật" type="submit" color="primary" />
-            </div>
-          </q-form>
-        </q-card-section>
-      </q-card>
-    </q-dialog>
-
     <q-dialog v-model="showDetailsDialog">
       <q-card style="min-width: 60vw; max-width: 800px;">
         <q-card-section class="row items-center q-pb-none">
@@ -531,17 +285,6 @@
                     <q-list bordered separator>
                         <q-item><q-item-section><q-item-label overline>Họ tên</q-item-label><q-item-label>{{ activeGuest.full_name }}</q-item-label></q-item-section></q-item>
                         <q-item><q-item-section><q-item-label overline>CCCD</q-item-label><q-item-label>{{ activeGuest.id_card_number }}</q-item-label></q-item-section></q-item>
-                        
-                        <!-- BẮT ĐẦU NÂNG CẤP: Hiển thị Ngày & Giờ dự kiến trong chi tiết -->
-                        <q-item v-if="activeGuest.estimated_datetime">
-                          <q-item-section>
-                            <q-item-label overline>Ngày & Giờ dự kiến</q-item-label>
-                            <!-- Định dạng lại cho đẹp -->
-                            <q-item-label>{{ quasarDate.formatDate(activeGuest.estimated_datetime, 'HH:mm - DD/MM/YYYY') }}</q-item-label>
-                          </q-item-section>
-                        </q-item>
-                        <!-- KẾT THÚC NÂNG CẤP -->
-
                         <q-item><q-item-section><q-item-label overline>Nhà cung cấp</q-item-label><q-item-label>{{ activeGuest.supplier_name }}</q-item-label></q-item-section></q-item>
                         <q-item><q-item-section><q-item-label overline>Biển số</q-item-label><q-item-label>{{ activeGuest.license_plate }}</q-item-label></q-item-section></q-item>
                         <q-item><q-item-section><q-item-label overline>Người đăng ký</q-item-label><q-item-label>{{ activeGuest.registered_by_name }}</q-item-label></q-item-section></q-item>
@@ -639,25 +382,17 @@ import { reactive, ref, onMounted, computed, watch } from 'vue'
 import { useQuasar, exportFile as qExportFile, date as quasarDate } from 'quasar'
 import api from '../api'
 import { useAuthStore } from '../stores/auth'
-// Import image upload utilities
-import { resizeImage, uploadMultipleImages } from '../utils/imageUpload'
-// Import validators
-import { validateEstimatedDateTime, validateGuestArray, validateDateRange } from '../utils/validators'
 
 const $q = useQuasar()
 const auth = useAuthStore()
 const isAdmin = computed(() => auth.user?.role === 'admin')
 const isManager = computed(() => auth.user?.role === 'manager')
 
-// --- BẮT ĐẦU NÂNG CẤP: Thay estimated_time bằng estimated_datetime ---
 const initialFormState = {
   full_name: '', id_card_number: '', company: '', reason: '',
   license_plate: '', supplier_name: '',
-  estimated_datetime: null, // <-- NÂNG CẤP
   guests: [{ full_name: '', id_card_number: '' }]
 }
-// --- KẾT THÚC NÂNG CẤP ---
-
 const form = reactive({ ...initialFormState })
 const isBulk = ref(false)
 const isLongTerm = ref(false)
@@ -668,15 +403,10 @@ const q = ref('')
 const fileInputRef = ref(null)
 const suggestions = reactive({ companies: [], license_plates: [], supplier_names: [] })
 const showEditDialog = ref(false)
-
-// --- BẮT ĐẦU NÂNG CẤP: Thêm estimated_datetime vào form sửa ---
 const editForm = reactive({
   id: null, full_name: '', id_card_number: '', company: '',
-  reason: '', license_plate: '', supplier_name: '', images: [],
-  estimated_datetime: null // <-- NÂNG CẤP
+  reason: '', license_plate: '', supplier_name: '', images: []
 })
-// --- KẾT THÚC NÂNG CẤP ---
-
 const newImageFiles = ref([])
 
 const imageFiles = ref([])
@@ -695,171 +425,6 @@ let searchTargetForm = 'main';
 const cccdInputRef = ref(null);
 const isScanning = ref(false);
 
-// === CẢI TIẾN 3: Logic cho Tab Tài sản của tôi ===
-const tab = ref('guests')
-const myAssets = ref([])
-const isLoadingAssets = ref(false)
-const assetSearch = ref('') // Search state
-
-// Client-side filtering
-const filteredMyAssets = computed(() => {
-  if (!assetSearch.value) return myAssets.value
-  const lowerQ = assetSearch.value.toLowerCase()
-  return myAssets.value.filter(item => 
-    (item.description_reason && item.description_reason.toLowerCase().includes(lowerQ)) ||
-    (item.destination && item.destination.toLowerCase().includes(lowerQ)) ||
-    (item.status && item.status.toLowerCase().includes(lowerQ))
-  )
-})
-
-const assetColumns = [
-  { name: 'id', label: 'ID', field: 'id', sortable: true, align: 'left' },
-  { name: 'description', label: 'Mô tả / Lý do', field: 'description_reason', align: 'left' },
-  { name: 'destination', label: 'Nơi đến', field: 'destination', align: 'left' },
-  { name: 'quantity', label: 'Số lượng', field: 'quantity', align: 'center' },
-  { name: 'status', label: 'Trạng thái', field: 'status', align: 'center' },
-  { name: 'estimated_datetime', label: 'Ngày dự kiến', field: 'estimated_datetime', format: val => val ? quasarDate.formatDate(val, 'DD/MM/YYYY') : '', align: 'center' },
-  { name: 'created_at', label: 'Ngày tạo', field: 'created_at', format: val => quasarDate.formatDate(val, 'DD/MM/YYYY HH:mm'), sortable: true, align: 'center' },
-  { name: 'actions', label: 'Thao tác', field: 'actions', align: 'center' }
-]
-
-async function loadMyAssets() {
-  if (tab.value !== 'assets') return
-  isLoadingAssets.value = true
-  try {
-    const res = await api.get('/assets/my-assets')
-    myAssets.value = res.data
-  } catch (error) {
-    console.error('Error loading assets:', error)
-    $q.notify({ type: 'negative', message: 'Không thể tải danh sách tài sản.' })
-  } finally {
-    isLoadingAssets.value = false
-  }
-}
-
-async function deleteAsset(id) {
-  $q.dialog({
-    title: 'Xác nhận',
-    message: 'Bạn có chắc chắn muốn xóa tài sản này?',
-    cancel: true,
-    persistent: true
-  }).onOk(async () => {
-    try {
-      await api.delete(`/assets/${id}`)
-      $q.notify({ type: 'positive', message: 'Đã xóa tài sản.' })
-      loadMyAssets()
-    } catch (error) {
-       $q.notify({ type: 'negative', message: error.response?.data?.detail || 'Xóa thất bại.' })
-    }
-  })
-}
-
-// --- Logic Edit Asset ---
-const showEditAssetDialog = ref(false)
-const editAssetForm = reactive({
-  id: null,
-  destination: '',
-  quantity: 1,
-  description_reason: '',
-  estimated_datetime: null
-})
-
-const formattedEditAssetDatetime = computed(() => {
-  if (!editAssetForm.estimated_datetime) return null
-  return quasarDate.formatDate(new Date(editAssetForm.estimated_datetime), 'DD/MM/YYYY')
-})
-
-function openEditAssetDialog(row) {
-  editAssetForm.id = row.id
-  editAssetForm.destination = row.destination
-  editAssetForm.quantity = row.quantity
-  editAssetForm.description_reason = row.description_reason
-  editAssetForm.estimated_datetime = row.estimated_datetime // Giả sử backend trả về trường này
-  showEditAssetDialog.value = true
-}
-
-async function submitEditAsset() {
-  try {
-    const payload = { ...editAssetForm }
-    delete payload.id // Không gửi ID trong body
-    
-    await api.put(`/assets/${editAssetForm.id}`, payload)
-    $q.notify({ type: 'positive', message: 'Cập nhật tài sản thành công!' })
-    showEditAssetDialog.value = false
-    loadMyAssets()
-  } catch (error) {
-    console.error('Update asset failed:', error)
-    $q.notify({ type: 'negative', message: error.response?.data?.detail || 'Cập nhật thất bại.' })
-  }
-}
-
-watch(tab, (val) => {
-  if (val === 'assets') {
-    loadMyAssets()
-  }
-})
-// === KẾT THÚC CẢI TIẾN 3 ===
-
-// --- BẮT ĐẦU NÂNG CẤP: Logic cho DateTime Picker ---
-const proxyDate = ref(null)
-const proxyTime = ref(null)
-// searchTargetForm đã tồn tại, chúng ta sẽ tái sử dụng nó cho ('main' hoặc 'edit')
-
-// Computed để hiển thị ngày giờ trong FORM CHÍNH
-const formattedEstimatedDatetime = computed(() => {
-  if (!form.estimated_datetime) return null;
-  // new Date() có thể xử lý chuỗi ISO (VD: 2025-10-30T15:30:00)
-  const d = new Date(form.estimated_datetime);
-  // Định dạng lại theo chuẩn Việt Nam
-  return quasarDate.formatDate(d, 'DD/MM/YYYY HH:mm');
-});
-
-// Computed để hiển thị ngày giờ trong DIALOG SỬA
-const formattedEditEstimatedDatetime = computed(() => {
-  if (!editForm.estimated_datetime) return null;
-  const d = new Date(editForm.estimated_datetime);
-  return quasarDate.formatDate(d, 'DD/MM/YYYY HH:mm');
-});
-
-// Hàm mở popup và khởi tạo giá trị
-function openDateTimePickerProxy(target) {
-  searchTargetForm = target; // 'main', 'edit', hoặc 'edit_asset'
-  let dStr = null;
-
-  if (target === 'main') {
-    dStr = form.estimated_datetime;
-  } else if (target === 'edit') {
-    dStr = editForm.estimated_datetime;
-  } else if (target === 'edit_asset') {
-    dStr = editAssetForm.estimated_datetime;
-  }
-
-  let d;
-  if (dStr) {
-    d = new Date(dStr);
-  } else {
-    d = new Date();
-  }
-  proxyDate.value = quasarDate.formatDate(d, 'YYYY-MM-DD');
-  proxyTime.value = quasarDate.formatDate(d, 'HH:mm');
-}
-
-function setEstimatedDatetime() {
-  if (proxyDate.value) {
-    const timeStr = proxyTime.value || '00:00';
-    const newVal = `${proxyDate.value}T${timeStr}:00`;
-    if (searchTargetForm === 'main') {
-      form.estimated_datetime = newVal;
-    } else if (searchTargetForm === 'edit') {
-      editForm.estimated_datetime = newVal;
-    } else if (searchTargetForm === 'edit_asset') {
-      editAssetForm.estimated_datetime = newVal;
-    }
-  }
-}
-// --- KẾT THÚC NÂNG CẤP ---
-
-
 watch(isLongTerm, (newVal) => {
   if (newVal) {
     // Đăng ký dài hạn không hỗ trợ tải ảnh lên trực tiếp
@@ -867,7 +432,6 @@ watch(isLongTerm, (newVal) => {
   }
 });
 
-// --- BẮT ĐẦU NÂNG CẤP: Thay đổi cột 'Giờ dự kiến' thành 'Ngày & Giờ dự kiến' ---
 const columns = [
   { name: 'thumbnail', label: 'Ảnh', field: 'thumbnail', align: 'center' },
   { name: 'full_name', align: 'left', label: 'Họ tên', field: 'full_name', sortable: true },
@@ -875,39 +439,12 @@ const columns = [
   { name: 'supplier_name', align: 'left', label: 'Nhà cung cấp', field: 'supplier_name', sortable: true },
   { name: 'reason', align: 'left', label: 'Chi tiết', field: 'reason', sortable: true, style: 'max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' },
   { name: 'license_plate', align: 'left', label: 'Biển số', field: 'license_plate', sortable: true },
-  
-  // --- NÂNG CẤP ---
-  { name: 'estimated_datetime', align: 'left', label: 'Ngày & Giờ dự kiến', field: 'estimated_datetime', sortable: true },
-  // --- KẾT THÚC NÂNG CẤP ---
-  
   { name: 'registered_by_name', align: 'left', label: 'Người đăng ký', field: 'registered_by_name', sortable: true },
   { name: 'created_at', align: 'left', label: 'Ngày đăng ký', field: 'created_at', sortable: true, format: val => val ? new Date(val).toLocaleString('vi-VN') : '' },
   { name: 'status', align: 'center', label: 'Trạng thái', field: 'status', sortable: true },
-  { 
-    name: 'check_in_time', 
-    align: 'left', 
-    label: 'Giờ vào', 
-    field: 'check_in_time', 
-    sortable: true, 
-    format: (val) => {
-      if (!val) return '';
-      try {
-        // Lấy thời gian từ CSDL (đang bị hiểu là giờ local, ví dụ 3:00)
-        const dbDate = new Date(val);
-        
-        // Cộng thêm 7 giờ để hiển thị đúng (ví dụ 10:00)
-        dbDate.setHours(dbDate.getHours() + 7);
-        
-        // Hiển thị thời gian đã cộng theo định dạng Việt Nam
-        return dbDate.toLocaleString('vi-VN');
-      } catch (e) {
-        return val; // Trả về giá trị gốc nếu có lỗi
-      }
-    } 
-  },
+  { name: 'check_in_time', align: 'left', label: 'Giờ vào', field: 'check_in_time', sortable: true, format: val => val ? new Date(val).toLocaleString('vi-VN') : '' },
   { name: 'actions', label: '', field: 'actions', align: 'right' }
 ]
-// --- KẾT THÚC NÂNG CẤP ---
 
 function triggerCccdInput() {
   cccdInputRef.value.click();
@@ -1023,7 +560,103 @@ function selectValue(type, value) {
   }
 }
 
-// Image upload functions moved to utils/imageUpload.js
+async function getOrientation(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const view = new DataView(e.target.result);
+        if (view.getUint16(0, false) !== 0xFFD8) return resolve(-1);
+        const length = view.byteLength;
+        let offset = 2;
+        while (offset < length) {
+          if (view.getUint16(offset + 2, false) <= 8) return resolve(-1);
+          const marker = view.getUint16(offset, false);
+          offset += 2;
+          if (marker === 0xFFE1) {
+            if (view.getUint32(offset + 2, false) !== 0x45786966) return resolve(-1);
+            const little = view.getUint16(offset += 6, false) === 0x4949;
+            offset += view.getUint32(offset + 4, little);
+            const tags = view.getUint16(offset, little);
+            offset += 2;
+            for (let i = 0; i < tags; i++) {
+              if (view.getUint16(offset + (i * 12), little) === 0x0112) {
+                return resolve(view.getUint16(offset + (i * 12) + 8, little));
+              }
+            }
+          } else if ((marker & 0xFF00) !== 0xFF00) break;
+          else offset += view.getUint16(offset, false);
+        }
+        return resolve(-1);
+      } catch (e) {
+        console.error("Error reading EXIF data", e);
+        return resolve(-1);
+      }
+    };
+    reader.onerror = () => resolve(-1);
+    reader.readAsArrayBuffer(file.slice(0, 64 * 1024));
+  });
+}
+
+async function resizeImage(file, maxSize = 1280) {
+    const orientation = await getOrientation(file);
+    const url = URL.createObjectURL(file);
+
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+                if (width > maxSize) {
+                    height *= maxSize / width;
+                    width = maxSize;
+                }
+            } else {
+                if (height > maxSize) {
+                    width *= maxSize / height;
+                    height = maxSize;
+                }
+            }
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            if (orientation > 4 && orientation < 9) {
+                canvas.width = height;
+                canvas.height = width;
+            } else {
+                canvas.width = width;
+                canvas.height = height;
+            }
+
+            switch (orientation) {
+                case 2: ctx.transform(-1, 0, 0, 1, width, 0); break;
+                case 3: ctx.transform(-1, 0, 0, -1, width, height); break;
+                case 4: ctx.transform(1, 0, 0, -1, 0, height); break;
+                case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;
+                case 6: ctx.transform(0, 1, -1, 0, height, 0); break;
+                case 7: ctx.transform(0, -1, -1, 0, height, width); break;
+                case 8: ctx.transform(0, -1, 1, 0, 0, width); break;
+                default: break;
+            }
+            
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            canvas.toBlob((blob) => {
+                if (blob) resolve(blob);
+                else reject(new Error('Canvas to Blob conversion failed'));
+            }, file.type || 'image/jpeg', 0.85);
+        };
+        img.onerror = (err) => {
+            URL.revokeObjectURL(url);
+            reject(err);
+        };
+        img.src = url;
+    });
+}
 
 async function load () {
   try {
@@ -1045,18 +678,7 @@ async function loadSuggestions() {
 
 async function onSubmit() {
     isSubmitting.value = true;
-
     try {
-        // Validate estimated datetime using utility
-        if (!validateEstimatedDateTime(form.estimated_datetime)) {
-             $q.notify({ 
-                 type: 'negative', 
-                 message: 'Vui lòng nhập "Ngày & Giờ dự kiến" để tiếp tục đăng ký.' 
-             });
-             isSubmitting.value = false;
-             return;
-        }
-        
         let successMessage = 'Đăng ký thành công!';
         
         if (isLongTerm.value) {
@@ -1084,10 +706,6 @@ async function onSubmit() {
                     supplier_name: form.supplier_name,
                     full_name: guest.full_name,
                     id_card_number: guest.id_card_number,
-                    
-                    // Gửi estimated_datetime cho khách dài hạn
-                    estimated_datetime: form.estimated_datetime || null,
-
                     start_date: quasarDate.formatDate(quasarDate.extractDate(longTermDates.from, 'YYYY/MM/DD'), 'YYYY-MM-DD'),
                     end_date: quasarDate.formatDate(quasarDate.extractDate(longTermDates.to, 'YYYY/MM/DD'), 'YYYY-MM-DD'),
                 };
@@ -1124,32 +742,37 @@ async function onSubmit() {
     }
 }
 
-
 async function uploadImagesForGuests(guests) {
     if (imageFiles.value && imageFiles.value.length > 0) {
         for (const guest of guests) {
-            await uploadMultipleImages(guest.id, imageFiles.value, (file, error) => {
-                $q.notify({ type: 'warning', message: `Lỗi upload ảnh ${file.name} cho khách ${guest.full_name}` });
-            });
+            for (const file of imageFiles.value) {
+                try {
+                    const resizedBlob = await resizeImage(file);
+                    const formData = new FormData();
+                    formData.append('file', resizedBlob, file.name);
+                    await api.post(`/guests/${guest.id}/upload-image`, formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' }
+                    });
+                } catch (uploadError) {
+                    console.error(`Failed to upload ${file.name} for guest ${guest.full_name}`, uploadError);
+                    $q.notify({ type: 'warning', message: `Lỗi upload ảnh ${file.name} cho khách ${guest.full_name}` });
+                }
+            }
         }
     }
 }
 
-// --- BẮT ĐẦU NÂNG CẤP: Reset cả estimated_datetime ---
 function resetForm() {
     Object.assign(form, { ...initialFormState, guests: [{ full_name: '', id_card_number: '' }] });
-    form.estimated_datetime = null; // <-- NÂNG CẤP
     imageFiles.value = [];
     isBulk.value = false;
     isLongTerm.value = false;
     longTermDates.from = '';
     longTermDates.to = '';
 }
-// --- KẾT THÚC NÂNG CẤP ---
 
 
 function editRow(row) {
-    // Đảm bảo sao chép sâu (deep copy) để tránh ảnh hưởng row gốc
     Object.assign(editForm, JSON.parse(JSON.stringify(row)));
     newImageFiles.value = [];
     showEditDialog.value = true;
@@ -1180,15 +803,22 @@ async function onUpdateSubmit() {
     $q.loading.show({ message: 'Đang cập nhật...' });
     try {
         editForm.supplier_name = editForm.supplier_name || editForm.company;
-        
-        // editForm (từ editForm definition) đã chứa estimated_datetime
-        // Hàm openDateTimePickerProxy/setEstimatedDatetime đã cập nhật nó
         await api.put(`/guests/${editForm.id}`, editForm);
 
         if (newImageFiles.value && newImageFiles.value.length > 0) {
-            await uploadMultipleImages(editForm.id, newImageFiles.value, (file, error) => {
-                $q.notify({ type: 'warning', message: `Lỗi upload ảnh ${file.name}` });
-            });
+            for (const file of newImageFiles.value) {
+                try {
+                    const resizedBlob = await resizeImage(file);
+                    const formData = new FormData();
+                    formData.append('file', resizedBlob, file.name);
+                    await api.post(`/guests/${editForm.id}/upload-image`, formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' }
+                    });
+                } catch (uploadError) {
+                   console.error(`Failed to upload ${file.name}`, uploadError);
+                   $q.notify({ type: 'warning', message: `Lỗi upload ảnh ${file.name}` });
+                }
+            }
         }
 
         $q.notify({ type: 'positive', message: 'Cập nhật thành công!' });
@@ -1266,61 +896,16 @@ function clearData() {
     cancel: true,
     persistent: true
   }).onOk(async (password) => {
-    try {
-      // Validate password với backend
-      const validation = await api.post('/admin/validate-delete-password', { password })
-      
-      if (validation.data.valid) {
+    if (password === 'Kienhp@@123') {
+      try {
         await api.post('/guests/clear')
         $q.notify({ type: 'positive', message: 'Đã xóa toàn bộ dữ liệu khách.' })
         load()
-      } else {
-        $q.notify({ type: 'negative', message: 'Sai mật khẩu.' })
+      } catch (error) {
+        $q.notify({ type: 'negative', message: 'Xóa dữ liệu thất bại.' })
       }
-    } catch (error) {
-      const message = error.response?.status === 401 ? 'Sai mật khẩu.' : 'Xóa dữ liệu thất bại.'
-      $q.notify({ type: 'negative', message })
-    }
-  })
-}
-
-function deleteOldData() {
-  $q.dialog({
-    title: 'Xác nhận xóa DỮ LIỆU CŨ',
-    message: 'Xóa các khách đăng ký cũ (pending, đã đăng ký và dự kiến vào trước hôm nay). Vui lòng nhập mật khẩu để xác nhận:',
-    prompt: {
-      model: '',
-      type: 'password'
-    },
-    cancel: true,
-    persistent: true
-  }).onOk(async (password) => {
-    $q.loading.show({ message: 'Đang xác thực...' })
-    
-    try {
-      // Validate password với backend
-      const validation = await api.post('/admin/validate-delete-password', { password })
-      
-      if (!validation.data.valid) {
-        $q.loading.hide()
-        $q.notify({ type: 'negative', message: 'Sai mật khẩu.' })
-        return
-      }
-      
-      // Password valid, proceed with delete
-      $q.loading.show({ message: 'Đang xóa dữ liệu cũ...' })
-      const response = await api.post('/guests/delete-old')
-      const deletedCount = response.data?.deleted_count || 0
-      $q.notify({ 
-        type: 'positive', 
-        message: response.data?.message || `Đã xóa ${deletedCount} khách đăng ký cũ.` 
-      })
-      load()
-    } catch (error) {
-      const detail = error.response?.data?.detail || 'Xóa dữ liệu thất bại.'
-      $q.notify({ type: 'negative', message: detail })
-    } finally {
-      $q.loading.hide()
+    } else {
+      $q.notify({ type: 'negative', message: 'Sai mật khẩu.' })
     }
   })
 }
@@ -1330,3 +915,4 @@ onMounted(() => {
   loadSuggestions()
 })
 </script>
+

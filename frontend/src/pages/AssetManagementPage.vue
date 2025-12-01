@@ -1,12 +1,8 @@
-<!-- File path: frontend/src/pages/AssetManagementPage.vue -->
-<!-- === CHECKLIST 2.5: Tạo file component AssetManagementPage.vue (copy từ LongTermGuestsPage.vue) === -->
 <template>
   <q-page padding>
     <q-card>
       <q-card-section class="row items-center justify-between">
-        <!-- === CHECKLIST 2.6: Cập nhật UI (Tiêu đề) === -->
         <div class="text-h6">Quản lý Lịch sử Tài sản</div>
-        <!-- === CHECKLIST 2.8: Thêm nút Export Excel === -->
         <q-btn 
           label="Xuất Excel" 
           color="positive" 
@@ -17,7 +13,7 @@
       </q-card-section>
       <q-separator />
 
-      <!-- === CHECKLIST 2.7: Thêm Filters === -->
+      <!-- Filters -->
       <q-card-section class="row q-col-gutter-md items-center">
          <div class="col-12 col-md-3">
             <q-input dense outlined v-model="filters.startDate" mask="date" label="Từ ngày">
@@ -64,7 +60,7 @@
         </div>
       </q-card-section>
 
-      <!-- === CHECKLIST 2.6: Cập nhật Q-Table === -->
+      <!-- Table -->
       <q-table
         :rows="rows"
         :columns="columns"
@@ -75,7 +71,6 @@
         @row-click="onRowClick"
         class="cursor-pointer"
       >
-        <!-- Template cho cột Trạng thái -->
         <template #body-cell-status="props">
           <q-td :props="props">
             <q-chip 
@@ -87,11 +82,10 @@
           </q-td>
         </template>
 
-        <!-- Template cho các cột ngày giờ -->
         <template #body-cell-created_at="props">
           <q-td :props="props">{{ formatDateTime(props.value) }}</q-td>
         </template>
-        <template #body-cell-expected_return_date="props">
+        <template #body-cell-estimated_datetime="props">
           <q-td :props="props">{{ formatDate(props.value) }}</q-td>
         </template>
          <template #body-cell-check_out_time="props">
@@ -100,7 +94,19 @@
         <template #body-cell-check_in_back_time="props">
           <q-td :props="props">{{ formatDateTime(props.value) }}</q-td>
         </template>
-        
+
+        <template #body-cell-actions="props">
+          <q-td :props="props">
+            <q-btn flat dense icon="edit" color="primary" @click.stop="openEditAssetDialog(props.row)" :disable="auth.user?.role !== 'admin' && props.row.status !== 'pending_out'">
+              <q-tooltip v-if="auth.user?.role === 'admin' || props.row.status === 'pending_out'">Sửa thông tin</q-tooltip>
+              <q-tooltip v-else>Chỉ sửa được khi chờ ra</q-tooltip>
+            </q-btn>
+            <q-btn flat dense icon="delete" color="negative" @click.stop="deleteAsset(props.row.id)" :disable="auth.user?.role !== 'admin' && props.row.status !== 'pending_out'">
+              <q-tooltip v-if="auth.user?.role === 'admin' || props.row.status === 'pending_out'">Xóa (Chỉ khi chưa ra cổng)</q-tooltip>
+              <q-tooltip v-else>Chỉ xóa được khi chờ ra</q-tooltip>
+            </q-btn>
+          </q-td>
+        </template>
       </q-table>
     </q-card>
 
@@ -209,7 +215,7 @@
             <q-item>
               <q-item-section>
                 <q-item-label caption>Dự kiến về</q-item-label>
-                <q-item-label>{{ formatDate(selectedAsset.expected_return_date) || 'Không về' }}</q-item-label>
+                <q-item-label>{{ formatDate(selectedAsset.estimated_datetime) || 'Không về' }}</q-item-label>
               </q-item-section>
             </q-item>
 
@@ -249,14 +255,62 @@
       </q-card>
     </q-dialog>
 
+    <!-- Edit Dialog -->
+    <q-dialog v-model="showEditAssetDialog">
+      <q-card style="min-width: 500px">
+        <q-card-section>
+          <div class="text-h6">Cập nhật tài sản</div>
+        </q-card-section>
+
+        <q-card-section>
+          <q-form @submit="submitEditAsset" class="q-gutter-md">
+            <q-input v-model="editAssetForm.destination" label="Nơi đến" outlined dense required />
+            <q-input v-model.number="editAssetForm.quantity" label="Số lượng" type="number" outlined dense required />
+            
+            <q-input 
+                v-model="formattedEditAssetDatetime" 
+                label="Ngày dự kiến *" 
+                dense 
+                outlined 
+                readonly 
+                required
+                :rules="[val => !!val || 'Vui lòng chọn ngày dự kiến']"
+              >
+                <template v-slot:append>
+                  <q-icon name="event" class="cursor-pointer" @click="openDateTimePickerProxy">
+                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                      <div class="q-pa-md" style="min-width: 300px">
+                        <div class="q-gutter-md">
+                          <q-date v-model="proxyDate" mask="YYYY-MM-DD" />
+                        </div>
+                        <div class="row items-center justify-end q-mt-md q-gutter-sm">
+                          <q-btn v-close-popup label="Bỏ qua" color="primary" flat />
+                          <q-btn v-close-popup label="OK" color="primary" @click="setEstimatedDatetime" />
+                        </div>
+                      </div>
+                    </q-popup-proxy>
+                  </q-icon>
+                </template>
+            </q-input>
+
+            <q-input v-model="editAssetForm.description_reason" label="Mô tả / Lý do" type="textarea" outlined dense required />
+            
+            <div class="row justify-end q-gutter-sm">
+              <q-btn label="Hủy" flat v-close-popup />
+              <q-btn label="Cập nhật" type="submit" color="primary" />
+            </div>
+          </q-form>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
 <script setup>
-import { ref, onMounted, reactive, watch } from 'vue';
+import { ref, onMounted, reactive, watch, computed } from 'vue';
 import { useQuasar, date as quasarDate } from 'quasar';
 import api from '../api';
-import { exportFile } from '../utils/export'; // === CHECKLIST 2.8 ===
+import { exportFile } from '../utils/export';
 import { useAuthStore } from '../stores/auth';
 
 const $q = useQuasar();
@@ -267,7 +321,7 @@ const showDetailDialog = ref(false);
 const selectedAsset = ref(null);
 const slide = ref(0);
 
-// === CHECKLIST 2.7: Thêm Filters ===
+// Filters
 const filters = reactive({
   status: null,
   department: '',
@@ -281,7 +335,7 @@ const statusOptions = [
   { label: 'Đã hoàn trả', value: 'returned' }
 ];
 
-// === CHECKLIST 2.6: Cập nhật Cột ===
+// Columns
 const columns = [
   { name: 'status', label: 'Trạng thái', field: 'status', align: 'left', sortable: true },
   { name: 'registered_by_name', label: 'Người đăng ký', field: row => row.registered_by.full_name, align: 'left' },
@@ -290,14 +344,15 @@ const columns = [
   { name: 'description_reason', label: 'Mô tả', field: 'description_reason', align: 'left', style: 'max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;' },
   { name: 'quantity', label: 'SL', field: 'quantity', align: 'center', sortable: true },
   { name: 'created_at', label: 'Ngày ĐK', field: 'created_at', align: 'left', sortable: true },
-  { name: 'expected_return_date', label: 'Dự kiến về', field: 'expected_return_date', align: 'left', sortable: true },
+  { name: 'estimated_datetime', label: 'Ngày dự kiến', field: 'estimated_datetime', align: 'left', sortable: true, format: val => formatDate(val) },
   { name: 'check_out_time', label: 'Giờ ra', field: 'check_out_time', align: 'left', sortable: true },
   { name: 'check_in_back_time', label: 'Giờ về', field: 'check_in_back_time', align: 'left', sortable: true },
   { name: 'check_out_by_name', label: 'BV xác nhận ra', field: row => row.check_out_by?.full_name, align: 'left' },
   { name: 'check_in_back_by_name', label: 'BV xác nhận về', field: row => row.check_in_back_by?.full_name, align: 'left' },
+  { name: 'actions', label: 'Thao tác', field: 'actions', align: 'center' }
 ];
 
-// === Helpers ===
+// Helpers
 function getStatusColor(status) {
   if (status === 'pending_out') return 'warning';
   if (status === 'checked_out') return 'info';
@@ -317,7 +372,7 @@ function formatDate(val) {
   return quasarDate.formatDate(val, 'YYYY/MM/DD');
 }
 
-// === CHECKLIST 2.7: Cập nhật logic loadData ===
+// Load Data
 async function loadData() {
   loading.value = true;
   try {
@@ -328,9 +383,6 @@ async function loadData() {
       end_date: filters.endDate ? quasarDate.formatDate(quasarDate.extractDate(filters.endDate, 'YYYY/MM/DD'), 'YYYY-MM-DD') : undefined,
     };
     
-    // Chỉ staff mới bị lọc theo user_id (logic này đã ở backend)
-    // const response = await api.get('/assets', { params: auth.user?.role === 'staff' ? params : { ...params, all: true } });
-    
     const response = await api.get('/assets', { params });
     rows.value = response.data;
   } catch (error) {
@@ -340,21 +392,21 @@ async function loadData() {
   }
 }
 
-// Open detail dialog when row is clicked
+// Row Click
 function onRowClick(evt, row) {
   selectedAsset.value = row;
   slide.value = 0;
   showDetailDialog.value = true;
 }
 
-// Get full image URL
+// Image URL
 function getImageUrl(imagePath) {
   if (!imagePath) return '';
   const apiBaseURL = api.defaults.baseURL || 'http://localhost:8000';
   return `${apiBaseURL}/uploads/${imagePath}`;
 }
 
-// === CHECKLIST 2.8: Logic Export Excel ===
+// Export
 function exportData() {
   loading.value = true;
   try {
@@ -366,7 +418,7 @@ function exportData() {
       'Mô tả': row.description_reason,
       'Số lượng': row.quantity,
       'Ngày ĐK': formatDateTime(row.created_at),
-      'Dự kiến về': formatDate(row.expected_return_date),
+      'Dự kiến về': formatDate(row.estimated_datetime),
       'Giờ ra': formatDateTime(row.check_out_time),
       'BV xác nhận ra': row.check_out_by?.full_name || '',
       'Giờ về': formatDateTime(row.check_in_back_time),
@@ -386,8 +438,85 @@ function exportData() {
   }
 }
 
-// Watch filters to reload data
+// Watch filters
 watch(filters, loadData, { deep: true });
+
+// Edit/Delete Logic
+async function deleteAsset(id) {
+  $q.dialog({
+    title: 'Xác nhận',
+    message: 'Bạn có chắc chắn muốn xóa tài sản này?',
+    cancel: true,
+    persistent: true
+  }).onOk(async () => {
+    try {
+      await api.delete(`/assets/${id}`)
+      $q.notify({ type: 'positive', message: 'Đã xóa tài sản.' })
+      loadData()
+    } catch (error) {
+       $q.notify({ type: 'negative', message: error.response?.data?.detail || 'Xóa thất bại.' })
+    }
+  })
+}
+
+const showEditAssetDialog = ref(false)
+const editAssetForm = reactive({
+  id: null,
+  destination: '',
+  quantity: 1,
+  description_reason: '',
+  estimated_datetime: null
+})
+const proxyDate = ref(null)
+
+const formattedEditAssetDatetime = computed(() => {
+  if (!editAssetForm.estimated_datetime) return null
+  return quasarDate.formatDate(new Date(editAssetForm.estimated_datetime), 'DD/MM/YYYY')
+})
+
+function openEditAssetDialog(row) {
+  editAssetForm.id = row.id
+  editAssetForm.destination = row.destination
+  editAssetForm.quantity = row.quantity
+  editAssetForm.description_reason = row.description_reason
+  editAssetForm.estimated_datetime = row.estimated_datetime 
+  showEditAssetDialog.value = true
+}
+
+function openDateTimePickerProxy() {
+  let d
+  if (editAssetForm.estimated_datetime) {
+    d = new Date(editAssetForm.estimated_datetime)
+  } else {
+    d = new Date()
+  }
+  proxyDate.value = quasarDate.formatDate(d, 'YYYY-MM-DD')
+}
+
+function setEstimatedDatetime() {
+  if (proxyDate.value) {
+    editAssetForm.estimated_datetime = `${proxyDate.value}T00:00:00`
+  }
+}
+
+async function submitEditAsset() {
+  try {
+    const payload = { 
+        destination: editAssetForm.destination,
+        quantity: editAssetForm.quantity,
+        description_reason: editAssetForm.description_reason,
+        estimated_datetime: editAssetForm.estimated_datetime
+    }
+    
+    await api.put(`/assets/${editAssetForm.id}`, payload)
+    $q.notify({ type: 'positive', message: 'Cập nhật tài sản thành công!' })
+    showEditAssetDialog.value = false
+    loadData()
+  } catch (error) {
+    console.error('Update asset failed:', error)
+    $q.notify({ type: 'negative', message: error.response?.data?.detail || 'Cập nhật thất bại.' })
+  }
+}
 
 onMounted(loadData);
 </script>

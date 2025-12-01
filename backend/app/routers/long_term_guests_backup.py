@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from datetime import date
 from typing import List
-import logging  # Thêm logging cho Cải tiến 1
 
 from .. import models, schemas
 from ..deps import get_db
@@ -50,10 +49,6 @@ def create_long_term_guest(
                 license_plate=payload.license_plate or "",
                 supplier_name=payload.supplier_name or "",
                 status="pending",
-                # --- NÂNG CẤP: Thay estimated_time bằng estimated_datetime ---
-                # (Đã xóa estimated_time)
-                estimated_datetime=payload.estimated_datetime, # Sao chép datetime
-                # --- KẾT THÚC NÂNG CẤP ---
                 registered_by_user_id=user.id,
                 created_at=get_local_time() # Ghi nhận thời gian tạo thực tế
             )
@@ -104,69 +99,12 @@ def update_long_term_guest(
     if end_date < start_date:
         raise HTTPException(status_code=400, detail="End date cannot be earlier than start date.")
 
-    # --- NÂNG CẤP: Xử lý estimated_datetime ---
-    # Xử lý riêng (cho phép set thành None)
-    if 'estimated_datetime' in update_data:
-        db_guest.estimated_datetime = update_data['estimated_datetime']
-        del update_data['estimated_datetime']
-    # --- KẾT THÚC NÂNG CẤP ---
-
     for key, value in update_data.items():
-        # Bỏ qua trường estimated_time (đã bị xóa)
-        if key != 'estimated_time':
-            setattr(db_guest, key, value)
+        setattr(db_guest, key, value)
         
     db.commit()
     db.refresh(db_guest)
     return db_guest
-
-# === CẢI TIẾN 1: Endpoint xóa dữ liệu cũ ===
-@router.delete("/cleanup")
-def cleanup_old_long_term_guests(
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user)
-):
-    """
-    Xóa các khách dài hạn có end_date < ngày hiện tại.
-    Chỉ admin/manager mới được phép.
-    
-    Returns:
-        {
-            "deleted_count": int,
-            "message": str
-        }
-    """
-    # 1. Kiểm tra quyền
-    if user.role not in ['admin', 'manager']:
-        raise HTTPException(
-            status_code=403,
-            detail="Chỉ admin/manager mới có quyền xóa dữ liệu cũ"
-        )
-    
-    # 2. Lấy ngày hiện tại (local timezone)
-    today = get_local_time().date()
-    
-    # 3. Query các record cũ
-    old_guests = db.query(models.LongTermGuest)\
-        .filter(models.LongTermGuest.end_date < today)\
-        .all()
-    
-    deleted_count = len(old_guests)
-    
-    # 4. Xóa
-    for guest in old_guests:
-        db.delete(guest)
-    
-    db.commit()
-    
-    # 5. Log
-    logging.info(
-        f"User {user.username} deleted {deleted_count} "
-        f"expired long-term guests (end_date < {today})"
-    )
-    
-    return {"deleted_count": deleted_count, "message": "Success"}
-# === KẾT THÚC CẢI TIẾN 1 ===
 
 @router.delete("/{guest_id}", status_code=204)
 def delete_long_term_guest(
@@ -183,7 +121,4 @@ def delete_long_term_guest(
     db.delete(db_guest)
     db.commit()
     return Response(status_code=204)
-
-
-
 

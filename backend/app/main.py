@@ -50,10 +50,20 @@ setup_logging()
 logging.info("Application startup...")
 
 # CORS Middleware
-# CORS Middleware - EMERGENCY FIX
+# CORS Middleware
+origins = [
+    "http://localhost",
+    "http://localhost:8080",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://192.168.223.176:5173",
+    "http://192.168.223.176:5174",
+    "http://192.168.223.176:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # CHO PHÉP TẤT CẢ (chỉ để test)
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -120,17 +130,14 @@ def on_startup():
                 )
             ).all()
 
-            system_user = db.scalars(select(models.User).where(models.User.username == 'system')).first()
-            if not system_user:
-                logging.warning("[long_term] 'system' user not found. Skipping job.")
-                return
+            # system_user check removed as we use original registrant
 
             start_of_day = datetime.combine(today, time.min, tzinfo=pytz.timezone(settings.TZ))
             end_of_day = datetime.combine(today, time.max, tzinfo=pytz.timezone(settings.TZ))
 
+            # Check for ANY guest with same ID card created today (to avoid duplicates)
             existing_guests_today = db.scalars(
                 select(models.Guest.id_card_number).where(
-                    models.Guest.registered_by_user_id == system_user.id,
                     models.Guest.created_at >= start_of_day,
                     models.Guest.created_at <= end_of_day,
                     models.Guest.id_card_number != ""
@@ -141,6 +148,9 @@ def on_startup():
             count = 0
             for lt_guest in active_long_term_guests:
                 if lt_guest.id_card_number and lt_guest.id_card_number not in existing_guest_set:
+                    # Use the original registrant's ID
+                    registrant_id = lt_guest.registered_by_user_id
+                    
                     new_guest = models.Guest(
                         full_name=lt_guest.full_name,
                         id_card_number=lt_guest.id_card_number,
@@ -150,7 +160,7 @@ def on_startup():
                         supplier_name=lt_guest.supplier_name,
                         estimated_datetime=lt_guest.estimated_datetime,
                         status="pending",
-                        registered_by_user_id=system_user.id,
+                        registered_by_user_id=registrant_id, # <--- UPDATED
                         created_at=models.get_local_time()
                     )
                     db.add(new_guest)
@@ -181,7 +191,7 @@ def on_startup():
         sched = BackgroundScheduler(timezone=settings.TZ)
         sched.add_job(
             create_daily_guest_entries,
-            trigger=IntervalTrigger(minutes=60),
+            trigger=IntervalTrigger(minutes=30),
             id="create_daily_guests_job",
             name="Create daily guest entries from long-term registrations",
             replace_existing=True,

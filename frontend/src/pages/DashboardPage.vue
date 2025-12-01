@@ -59,29 +59,22 @@
           </q-card-section>
         </q-card>
       </div>
-       <div class="col-12 col-md-6 col-lg-4">
-        <q-card>
-          <q-card-section>
-             <div class="text-subtitle1">Lượt khách theo người đăng ký</div>
-          </q-card-section>
-          <q-separator />
-          <q-card-section>
-            <PieChart :labels="guestsByUser.labels" :series="guestsByUser.series"/>
-          </q-card-section>
-        </q-card>
-      </div>
+      
+      <!-- === CẢI TIẾN 5: Biểu đồ tài sản thay thế 2 biểu đồ cũ === -->
       <div class="col-12 col-md-6 col-lg-4">
         <q-card>
           <q-card-section>
-            <div class="text-subtitle1">Lượt khách theo nhà cung cấp</div>
+            <div class="text-subtitle1">Trạng thái tài sản ra/vào</div>
           </q-card-section>
           <q-separator />
           <q-card-section>
-            <PieChart :labels="guestsBySupplier.labels" :series="guestsBySupplier.series"/>
+            <PieChart :labels="assetsByStatus.labels" :series="assetsByStatus.series"/>
           </q-card-section>
         </q-card>
       </div>
-       <div class="col-12 col-lg-8">
+      <!-- === KẾT THÚC CẢI TIẾN 5 === -->
+      
+      <div class="col-12 col-lg-8">
         <q-card>
           <q-card-section>
             <div class="text-subtitle1">Top 10 xe vào nhiều nhất</div>
@@ -104,8 +97,11 @@ import BarChart from '../components/charts/BarChart.vue';
 import PieChart from '../components/charts/PieChart.vue';
 
 const guestsDaily = reactive({ labels: [], series: [] });
-const guestsByUser = reactive({ labels: [], series: [] });
-const guestsBySupplier = reactive({ labels: [], series: [] });
+// === CẢI TIẾN 5: Xóa 2 reactive cũ, thêm reactive mới ===
+// const guestsByUser = reactive({ labels: [], series: [] });  // XÓA
+// const guestsBySupplier = reactive({ labels: [], series: [] });  // XÓA
+const assetsByStatus = reactive({ labels: [], series: [] });  // THÊM MỚI
+// === KẾT THÚC CẢI TIẾN 5 ===
 const guestsByPlate = reactive({ labels: [], series: [] });
 
 const filters = reactive({
@@ -157,21 +153,23 @@ async function load() {
   }
   
   try {
-    const [daily, byUser, bySupplier, byPlate] = await Promise.all([
+    // === CẢI TIẾN 5: Thay đổi API calls ===
+    const [daily, assetStatus, byPlate] = await Promise.all([
       api.get('/reports/guests_daily', { params }),
-      api.get('/reports/guests_by_user', { params }),
-      api.get('/reports/guests_by_supplier', { params }),
+      api.get('/reports/assets_by_status', { params }),  // MỚI
       api.get('/reports/guests_by_plate', { params })
     ]);
     
     guestsDaily.labels = daily.data.labels;
     guestsDaily.series = daily.data.series;
-    guestsByUser.labels = byUser.data.labels;
-    guestsByUser.series = byUser.data.series;
-    guestsBySupplier.labels = bySupplier.data.labels;
-    guestsBySupplier.series = bySupplier.data.series;
+    
+    // Gán data cho biểu đồ tài sản mới
+    assetsByStatus.labels = assetStatus.data.labels;
+    assetsByStatus.series = assetStatus.data.series;
+    
     guestsByPlate.labels = byPlate.data.labels;
     guestsByPlate.series = byPlate.data.series;
+    // === KẾT THÚC CẢI TIẾN 5 ===
   } catch (error) {
     console.error("Failed to load dashboard data:", error);
   }

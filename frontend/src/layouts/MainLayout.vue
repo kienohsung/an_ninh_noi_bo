@@ -37,7 +37,7 @@
           <q-item-section>Đăng ký Tài sản</q-item-section>
         </q-item>
 
-        <q-item v-if="['admin','manager','staff'].includes(auth.user?.role)" clickable v-ripple to="/asset-management">
+        <q-item v-if="['admin','manager'].includes(auth.user?.role)" clickable v-ripple to="/asset-management">
           <q-item-section avatar><q-icon name="inventory"/></q-item-section>
           <q-item-section>Quản lý Tài sản</q-item-section>
         </q-item>

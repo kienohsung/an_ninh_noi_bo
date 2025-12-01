@@ -94,3 +94,61 @@ def guests_by_plate(db: Session = Depends(get_db), start: datetime | None = None
         logger.error(f"Error in guests_by_plate: {e}", exc_info=True)
         return {"labels": [], "series": []}
 
+
+# === CẢI TIẾN 5: Endpoint thống kê tài sản theo trạng thái ===
+@router.get("/assets_by_status")
+def assets_by_status(
+    db: Session = Depends(get_db), 
+    start: datetime | None = None, 
+    end: datetime | None = None
+):
+    """
+    Thống kê số lượng tài sản theo trạng thái.
+    
+    Returns:
+        {
+            "labels": ["Chờ ra cổng", "Đã ra cổng", "Đã vào lại"],
+            "series": [10, 5, 3]
+        }
+    """
+    try:
+        # Build query
+        query = db.query(
+            models.AssetLog.status,
+            func.count(models.AssetLog.id).label('count')
+        )
+        
+        # Apply date filters if provided (filter by created_at)
+        if start:
+            query = query.filter(models.AssetLog.created_at >= start)
+        
+        if end:
+            query = query.filter(models.AssetLog.created_at <= end)
+        
+        # Group by status
+        results = query.group_by(models.AssetLog.status).all()
+        
+        # Map status to Vietnamese labels
+        status_labels = {
+            'pending_out': 'Chờ ra cổng',
+            'checked_out': 'Đã ra cổng',
+            'returned': 'Đã vào lại'
+        }
+        
+        labels = []
+        series = []
+        
+        for status, count in results:
+            label = status_labels.get(status, status)
+            labels.append(label)
+            series.append(count)
+        
+        return {
+            "labels": labels,
+            "series": series
+        }
+    except Exception as e:
+        logger.error(f"Error in assets_by_status: {e}", exc_info=True)
+        return {"labels": [], "series": []}
+# === KẾT THÚC CẢI TIẾN 5 ===
+

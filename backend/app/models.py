@@ -115,6 +115,7 @@ class AssetLog(Base):
     asset_description = Column(Text, nullable=False)  # <--- Added to match DB
     quantity = Column(Integer, nullable=False, default=1)
     expected_return_date = Column(Date, nullable=True)
+    estimated_datetime = Column(DateTime, nullable=True)  # <--- Added to match logic
     
     # Trạng thái và Dấu vết
     status = Column(String(16), index=True, default=ASSET_STATUS_PENDING_OUT)

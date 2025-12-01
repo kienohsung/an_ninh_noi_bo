@@ -165,19 +165,6 @@ if 'column_name' not in [col['name'] for col in cursor.fetchall()]:
 
 ### 🔍 Nguyên nhân
 - Bug trong data fetching logic
-- Google Sheet API connection issues
-- Frontend rendering bug
-
-### ✅ Giải pháp
-- Debug data fetching chain từ Google Sheet → Backend → Frontend
-- Check API credentials và permissions
-- Verify rendering logic handles empty/error states
-
----
-
-## 6. Best Practices
-
-### 🎯 Authentication & Session Management
 
 #### ✅ DO:
 - **Luôn validate tokens** trước khi sử dụng
@@ -313,3 +300,26 @@ const CACHE_NAME = 'app-cache-v1'
 ---
 
 **Lưu ý:** Tài liệu này nên được cập nhật mỗi khi gặp và fix lỗi mới. Giúp team tránh lặp lại sai lầm và tiết kiệm thời gian debug!
+
+---
+
+## 6. Lỗi Asset Registration & Management (30/11/2025)
+
+### 🔴 Triệu chứng
+1. **Frontend Build Errors:** "Element is missing end tag", "Invalid end tag" trong `AssetManagementPage.vue`.
+2. **CORS Error:** `Access to XMLHttpRequest at 'http://.../assets' from origin 'http://...:5173' has been blocked by CORS policy`.
+3. **500 Internal Server Error:** Khi submit form đăng ký tài sản.
+
+### 🔍 Nguyên nhân
+1. **Frontend:** File `AssetManagementPage.vue` bị corrupt, thiếu đóng thẻ hoặc sai cấu trúc HTML do quá trình edit.
+2. **CORS:** Cấu hình `CORSMiddleware` dùng wildcard `allow_origins=["*"]` nhưng lại bật `allow_credentials=True`. Điều này không hợp lệ.
+3. **500 Error:** Database schema thiếu cột `estimated_datetime` trong bảng `asset_log`, nhưng code backend lại cố gắng insert dữ liệu vào cột này.
+
+### ✅ Giải pháp
+1. **Frontend:** Viết lại toàn bộ file `AssetManagementPage.vue` với cấu trúc đúng.
+2. **CORS:** Cập nhật `backend/app/main.py` để chỉ định rõ danh sách `origins` (bao gồm localhost và IP LAN).
+3. **Database:** Chạy migration script `add_estimated_datetime_column.py` để thêm cột thiếu vào database SQLite.
+
+### 📝 Bài học
+- **CORS & Credentials:** Không bao giờ dùng `allow_origins=["*"]` cùng với `allow_credentials=True`. Luôn list rõ các origins.
+- **Schema Sync:** Luôn kiểm tra kỹ model definition và database schema thực tế khi thêm trường mới.

@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
 from datetime import datetime
-import pytz # Thêm import pytz
 import pandas as pd
 import io
 import logging
@@ -33,14 +32,6 @@ def create_guest(payload: schemas.GuestCreate, db: Session = Depends(get_db), us
     """
     Tạo một bản ghi khách lẻ mới.
     """
-    # === CẢI TIẾN 3: Validate estimated_datetime bắt buộc ===
-    if not payload.estimated_datetime:
-        raise HTTPException(
-            status_code=400,
-            detail="Ngày giờ dự kiến là bắt buộc"
-        )
-    # === KẾT THÚC CẢI TIẾN 3 ===
-    
     # Chuẩn hóa biển số ngay khi nhận được yêu cầu (code cũ)
     if payload.license_plate:
         payload.license_plate = format_license_plate(payload.license_plate)
@@ -60,10 +51,6 @@ def create_guest(payload: schemas.GuestCreate, db: Session = Depends(get_db), us
         license_plate=payload.license_plate or "",
         supplier_name=payload.supplier_name or "",
         status="pending",
-        # --- NÂNG CẤP: Thay estimated_time bằng estimated_datetime ---
-        # (Đã xóa estimated_time)
-        estimated_datetime=payload.estimated_datetime, # Lưu đối tượng datetime
-        # --- KẾT THÚC NÂNG CẤP ---
         registered_by_user_id=user.id
     )
     db.add(guest)
@@ -121,7 +108,7 @@ def create_guests_bulk(payload: schemas.GuestBulkCreate, db: Session = Depends(g
     for individual in payload.guests:
         if not individual.full_name:
             continue
-
+            
         # --- THÊM MỚI: CHUẨN HÓA HỌ TÊN CỦA TỪNG KHÁCH ---
         # Tự động chuẩn hóa họ tên của từng người trong đoàn
         standardized_individual_name = format_full_name(individual.full_name)
@@ -137,10 +124,6 @@ def create_guests_bulk(payload: schemas.GuestBulkCreate, db: Session = Depends(g
             license_plate=formatted_plate,
             supplier_name=payload.supplier_name or "",
             status="pending",
-            # --- NÂNG CẤP: Thay estimated_time bằng estimated_datetime ---
-            # (Đã xóa estimated_time)
-            estimated_datetime=payload.estimated_datetime, # Áp dụng chung cho cả đoàn
-            # --- KẾT THÚC NÂNG CẤP ---
             registered_by_user_id=user.id
         )
         db.add(guest)
@@ -234,22 +217,12 @@ def update_guest(guest_id: int, payload: schemas.GuestUpdate, db: Session = Depe
 
     update_data = payload.model_dump(exclude_unset=True)
 
-    # Chuẩn hóa biển số khi cập nhật (giữ nguyên)
+    # Chuẩn hóa biển số khi cập nhật
     if 'license_plate' in update_data and update_data['license_plate']:
         update_data['license_plate'] = format_license_plate(update_data['license_plate'])
 
-    # --- NÂNG CẤP: Xử lý estimated_datetime ---
-    # Xử lý riêng estimated_datetime (cho phép set thành None)
-    if 'estimated_datetime' in update_data:
-        guest.estimated_datetime = update_data['estimated_datetime']
-        # Xóa khỏi update_data để vòng lặp bên dưới không xử lý lại
-        del update_data['estimated_datetime']
-    # --- KẾT THÚC NÂNG CẤP ---
-
     for field, value in update_data.items():
-        # Bỏ qua estimated_time (đã bị xóa)
-        if field != 'estimated_time':
-            setattr(guest, field, value)
+        setattr(guest, field, value)
 
     db.commit()
     db.refresh(guest)
@@ -370,29 +343,6 @@ def import_guests(file: UploadFile = File(...), db: Session = Depends(get_db), u
                  logger.warning(f"Không tìm thấy username '{registered_by_username}' ở dòng {index+2}. Gán khách '{row.get('Họ tên')}' cho người import '{user.username}'.")
 
             license_plate_raw = row.get("Biển số", "")
-            
-            # --- NÂNG CẤP: Đọc Giờ dự kiến (cũ) và Ngày giờ dự kiến (mới) ---
-            # Ưu tiên cột mới "Ngày giờ dự kiến"
-            estimated_datetime_val = row.get("Ngày giờ dự kiến")
-            estimated_datetime_obj = None
-
-            if pd.notna(estimated_datetime_val):
-                try:
-                    if isinstance(estimated_datetime_val, datetime):
-                        estimated_datetime_obj = estimated_datetime_val
-                    else:
-                        # Thử parse từ chuỗi (ví dụ: 2025-10-30 09:30:00 hoặc dd/mm/YYYY HH:MM)
-                        for fmt_dt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M"):
-                            try:
-                                estimated_datetime_obj = datetime.strptime(str(estimated_datetime_val), fmt_dt)
-                                break
-                            except ValueError:
-                                continue
-                        if not estimated_datetime_obj:
-                            logger.warning(f"Không thể phân tích 'Ngày giờ dự kiến' '{estimated_datetime_val}' ở dòng {index+2}. Bỏ qua.")
-                except Exception:
-                     logger.warning(f"Không thể phân tích 'Ngày giờ dự kiến' '{estimated_datetime_val}' ở dòng {index+2}. Bỏ qua.")
-            # --- KẾT THÚC NÂNG CẤP ---
 
             guest = models.Guest(
                 full_name=row.get("Họ tên", ""),
@@ -403,9 +353,6 @@ def import_guests(file: UploadFile = File(...), db: Session = Depends(get_db), u
                 license_plate=format_license_plate(license_plate_raw) if license_plate_raw else "",
                 status=status,
                 check_in_time=check_in_time,
-                # --- NÂNG CẤP: Lưu Ngày giờ dự kiến ---
-                estimated_datetime=estimated_datetime_obj,
-                # --- KẾT THÚC NÂNG CẤP ---
                 registered_by_user_id=registered_by_user_id
             )
 
@@ -446,7 +393,7 @@ def import_guests(file: UploadFile = File(...), db: Session = Depends(get_db), u
 
 @router.get("/export/xlsx", dependencies=[Depends(require_roles("admin", "manager"))])
 def export_guests(db: Session = Depends(get_db)):
-    # Logic export giữ nguyên, thêm cột Ngày giờ dự kiến
+    # Logic export giữ nguyên
     try:
         results = db.query(
             models.Guest,
@@ -458,21 +405,6 @@ def export_guests(db: Session = Depends(get_db)):
 
         data_to_export = []
         for guest, registered_by_name, registered_by_username in results:
-            
-            # --- NÂNG CẤP: Định dạng Ngày giờ dự kiến ---
-            est_datetime_str = ""
-            if guest.estimated_datetime:
-                try:
-                    # Chuyển đổi sang múi giờ local (TZ) trước khi format
-                    est_datetime_str = guest.estimated_datetime.astimezone(pytz.timezone(settings.TZ)).strftime("%d/%m/%Y %H:%M")
-                except Exception:
-                     # Fallback nếu datetime không có thông tin múi giờ (ví dụ: từ dữ liệu import cũ)
-                    try:
-                        est_datetime_str = guest.estimated_datetime.strftime("%d/%m/%Y %H:%M")
-                    except Exception:
-                         est_datetime_str = str(guest.estimated_datetime) # Fallback cuối cùng
-            # --- KẾT THÚC NÂNG CẤP ---
-
             data_to_export.append({
                 "Họ tên": guest.full_name,
                 "CCCD": guest.id_card_number,
@@ -484,10 +416,6 @@ def export_guests(db: Session = Depends(get_db)):
                 "Ngày đăng ký": guest.created_at.astimezone(pytz.timezone(settings.TZ)).strftime("%d/%m/%Y %H:%M") if guest.created_at else "",
                 "Trạng thái": "ĐÃ VÀO" if guest.status == 'checked_in' else "CHƯA VÀO",
                 "Giờ vào": guest.check_in_time.astimezone(pytz.timezone(settings.TZ)).strftime("%d/%m/%Y %H:%M") if guest.check_in_time else "",
-                # --- NÂNG CẤP: Xuất Ngày giờ dự kiến (thay cho Giờ dự kiến) ---
-                "Ngày giờ dự kiến": est_datetime_str, # Cột mới
-                # "Giờ dự kiến": "", # Bỏ cột cũ (hoặc để trống nếu muốn giữ cấu trúc)
-                # --- KẾT THÚC NÂNG CẤP ---
                 "Lý do": guest.reason,
                 "Hình ảnh": ", ".join([img.image_path for img in guest.images])
             })
@@ -530,44 +458,3 @@ def clear_guests(db: Session = Depends(get_db)):
         db.rollback()
         logger.error(f"Lỗi khi xóa dữ liệu khách: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Xóa dữ liệu thất bại: {e}")
-
-@router.post("/delete-old", dependencies=[Depends(require_roles("admin"))])
-def delete_old_pending_guests(db: Session = Depends(get_db)):
-    """
-    Xóa các khách đăng ký cũ với điều kiện:
-    - Trạng thái: pending (chờ vào)
-    - Ngày đăng ký (created_at) từ ngày hôm qua hoặc cũ hơn
-    - Ngày vào dự kiến (estimated_datetime) từ ngày hôm qua hoặc cũ hơn
-    """
-    try:
-        # Lấy thời điểm bắt đầu của ngày hôm nay (00:00:00)
-        tz = pytz.timezone(settings.TZ)
-        today_start = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
-        
-        # Tìm tất cả khách thỏa mãn điều kiện
-        old_guests = db.query(models.Guest).filter(
-            models.Guest.status == "pending",
-            models.Guest.created_at < today_start,
-            models.Guest.estimated_datetime < today_start
-        ).options(joinedload(models.Guest.images)).all()
-        
-        if not old_guests:
-            return {"ok": True, "message": "Không có dữ liệu cũ để xóa.", "deleted_count": 0}
-        
-        # Lưu trữ ảnh trước khi xóa
-        deleted_count = 0
-        for guest in old_guests:
-            for image in guest.images:
-                _archive_image(image.image_path)
-            db.delete(guest)
-            deleted_count += 1
-        
-        db.commit()
-        logger.info(f"Đã xóa {deleted_count} khách đăng ký cũ (pending, created < today, estimated < today)")
-        return {"ok": True, "message": f"Đã xóa {deleted_count} khách đăng ký cũ.", "deleted_count": deleted_count}
-    
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Lỗi khi xóa dữ liệu khách cũ: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Xóa dữ liệu thất bại: {e}")
-

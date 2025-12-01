@@ -91,11 +91,22 @@ class AssetLogBase(BaseModel):
     destination: str
     description_reason: str  # Required field - no default value
     quantity: int
-    department: str  # <<< FIX: Thêm trường bộ phận
+    department: str
     expected_return_date: Optional[date] = None
+    estimated_datetime: Optional[datetime] = None  # CẢI TIẾN 3
 
 class AssetLogCreate(AssetLogBase):
     pass
+
+# === CẢI TIẾN 2: Schema cho update asset ===
+class AssetLogUpdate(BaseModel):
+    destination: Optional[str] = None
+    description_reason: Optional[str] = None
+    quantity: Optional[int] = None
+    department: Optional[str] = None
+    expected_return_date: Optional[date] = None
+    estimated_datetime: Optional[datetime] = None
+# === KẾT THÚC CẢI TIẾN 2 ===
 
 class AssetLogDisplay(AssetLogBase):
     id: int
